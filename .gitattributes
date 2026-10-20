@@ -8,3 +8,7 @@
 *.json  text
 *.yml   text
 *.md    text
+
+# 从源码归档（Release 页面的 Source code zip / tar.gz）中排除测试目录：
+# 发布产物只需要运行时 + 文档；测试请 clone 仓库后运行 `npm test`
+/test export-ignore
