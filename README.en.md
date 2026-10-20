@@ -93,21 +93,34 @@ DSH desktop → Settings → **Add plugin**, paste any one of the following (res
 |---|---|---|
 | **GitHub repository URL** (recommended) | `https://github.com/maomitgd2006/DSH_CG` | Fetches the source and registers the bundle in the current profile |
 | **Local directory path** | `<path to this package>` (e.g. `/opt/dsh-calibguard`) | For a local clone / extracted copy |
-| Package name | `dsh-calibguard` | ✅ **Published on npm** (latest v0.2.1); just enter the package name |
+| **Package name** | `dsh-calibguard` | ✅ **Published on npm**; just enter the package name (installs npm `latest`) |
 
 > Equivalent CLI (verified: after install DSH automatically appends the package to the profile's
 > `dsh.profile.bundles`):
 >
 > ```powershell
-> dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG
-> dsh plugin --profile <profile> add file:<absolute path to this package>
+> dsh plugin --profile <profile> add dsh-calibguard                          # npm package (recommended)
+> dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG  # GitHub source
+> dsh plugin --profile <profile> add file:<absolute path to this package>     # local directory
 > ```
 >
-> Published on npm: <https://www.npmjs.com/package/dsh-calibguard> (`npm i dsh-calibguard` also works).
+> npm package page: <https://www.npmjs.com/package/dsh-calibguard>
 
 **Whichever way you install it**, the first run prepares the engine automatically (next section) — no manual setup needed.
 
-### Option A — source mode (a `file://` loader row, no install)
+### Option A — install via the CLI (npm package; for non-desktop / scripted setups)
+
+```powershell
+dsh plugin --profile <profile> add dsh-calibguard
+```
+
+Then insert the loader row in the profile's `cordis.patch.yml` with `name: dsh-calibguard`
+(this package ships its own `cordis.patch.yml`, which is applied automatically as a bundle).
+
+> The `desktop` profile is managed exclusively by the Electron app — CLI refuses it. Desktop users
+> should use "Option 0", or the `file://` row in "Option B".
+
+### Option B — source mode (a `file://` loader row, for local development / offline use)
 
 Append to the profile's `cordis.patch.yml` (replace the path with yours):
 
@@ -127,14 +140,11 @@ The `insert` path is rewritten to a `file://` URL by DSH. On desktop the profile
 Optional: `node scripts/link-dsh.mjs` junctions DSH's own `@deepseek-ai/*` packages into this package so
 the optional `defineTool` / Config schema support is active (everything still works without it).
 
-### Option B — install into a profile
+### Option C — release archive (offline / no npm)
 
-```powershell
-dsh plugin --profile <profile> add file:<absolute path to this package>
-```
-
-Then insert the loader row as above, using the package name `dsh-calibguard` as `name`.
-(The `desktop` profile is managed exclusively by the Electron app — desktop users must use Option A.)
+Download `dsh-calibguard-<version>.zip` (~100 KB, no `test/`) from
+[Releases](https://github.com/maomitgd2006/DSH_CG/releases/latest), extract it to a fixed directory,
+then point the `name` in "Option B" at `<extracted dir>/lib/index.js`.
 
 ### Verify
 
@@ -245,7 +255,8 @@ DSH_CG/
 ├── bridge/              Python bridge: persistent child process, line-delimited JSON protocol
 ├── cordis.patch.yml     Bundle patch (inserts the loader row)
 ├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
-├── test/                node --test (87 cases; auto-skip when the engine env is missing)
+├── test/                node --test (95 cases; auto-skip when the engine env is missing)
+├── .github/workflows/   publish.yml: npm trusted publishing (OIDC, optional)
 └── docs/                configuration, performance, troubleshooting, plugin contract, design notes
 ```
 

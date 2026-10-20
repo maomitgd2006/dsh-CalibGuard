@@ -85,20 +85,33 @@ DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一�
 |---|---|---|
 | **GitHub 仓库地址**（推荐） | `https://github.com/maomitgd2006/DSH_CG` | 自动拉取源码并登记到当前 profile 的 bundle |
 | **本地目录路径** | `<你的插件目录>`（例：`D:\code\dsh-calibguard`） | 已 clone / 解压到本地时用 |
-| 包名 | `dsh-calibguard` | ✅ **已发布到 npm**（最新 v0.2.1）；直接输包名即可 |
+| **包名** | `dsh-calibguard` | ✅ **已发布到 npm**，直接输包名即可（自动装 npm 上的 latest） |
 
 > 等价命令行（已实测：安装后 DSH 会自动把包加进 profile 的 `dsh.profile.bundles`）：
 >
 > ```powershell
-> dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG
-> dsh plugin --profile <profile> add file:<本包绝对路径>
+> dsh plugin --profile <profile> add dsh-calibguard                                   # npm 包（推荐）
+> dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG           # GitHub 源码
+> dsh plugin --profile <profile> add file:<本包绝对路径>                                # 本地目录
 > ```
 >
-> 包名已发布：<https://www.npmjs.com/package/dsh-calibguard>（`npm i dsh-calibguard` 亦可）。
+> npm 包页：<https://www.npmjs.com/package/dsh-calibguard>
 
 **无论用哪种方式**，装好后首次运行都不需要手动装引擎——插件会自动准备（见下一节）。
 
-### 方式 A：源码方式（`file://` 行，无需安装）
+### 方式 A：命令行安装（npm 包，适合非桌面版 / 脚本化）
+
+```powershell
+dsh plugin --profile <profile> add dsh-calibguard
+```
+
+之后同样在 profile 的 `cordis.patch.yml` 里插一行，`name` 直接写包名 `dsh-calibguard`
+（本包自带的 `cordis.patch.yml` 会自动把插件行叠加进配置树）。
+
+> `desktop` profile 被 Electron 独占，CLI 拒绝管理它 —— 桌面版请用「方式 0」，
+> 或「方式 B」的 `file://` 行。
+
+### 方式 B：源码方式（`file://` 行，适合本地开发 / 离线）
 
 在 profile 的 `cordis.patch.yml` 末尾追加（路径改成你的实际位置）：
 
@@ -118,14 +131,11 @@ DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一�
 可选：`node scripts/link-dsh.mjs` 把 DSH 自带的 `@deepseek-ai/*` 以目录联接挂到本包，让
 `defineTool` / Config 结构校验这两个可选能力生效（不做也能跑）。
 
-### 方式 B：安装进 profile
+### 方式 C：发行包（离线 / 不想用 npm）
 
-```powershell
-dsh plugin --profile <profile> add file:<本包绝对路径>
-```
-
-之后同样在 patch 里插一行，`name` 可以直接写包名 `dsh-calibguard`。
-（`desktop` profile 被 Electron 独占，CLI 拒绝管理，桌面版只能走方式 A。）
+从 [Releases](https://github.com/maomitgd2006/DSH_CG/releases/latest) 下载
+`dsh-calibguard-<版本>.zip`（约 100 KB，不含 `test/`），解压到一个固定目录，然后按「方式 B」
+把 `name` 指向解压目录下的 `lib/index.js` 即可。
 
 ### 验证
 
@@ -234,7 +244,8 @@ DSH_CG/
 ├── bridge/              Python 桥接：常驻子进程，行式 JSON 协议，复用引擎
 ├── cordis.patch.yml     组合包 patch（把插件行插进 profile 配置树）
 ├── scripts/             link-dsh（开发期挂包）、bridge-selftest（引擎自检）
-├── test/                node --test（87 个用例；缺引擎环境时自动 skip）
+├── test/                node --test（95 个用例；缺引擎环境时自动 skip）
+├── .github/workflows/   publish.yml：npm 可信发布（OIDC，可选）
 └── docs/                配置全表、性能、排错、插件契约、实现决策
 ```
 
