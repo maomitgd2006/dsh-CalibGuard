@@ -50,7 +50,7 @@ file sha256, and the report path.
 
 ## Install
 
-### 0) Engine dependencies: prepared automatically on first run (like CG_GUI's launcher)
+### Before you start: engine dependencies are prepared automatically (like CG_GUI's launcher)
 
 This plugin is only the wrapper: the auditing engine (`calibguard/` + **475 MB of model weights**) and its
 Python dependencies must be present. **You don't install them by hand.** After you install the plugin and
