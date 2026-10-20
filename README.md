@@ -76,6 +76,28 @@
 2. **Python 64 位 3.10–3.12**（首次自动安装依赖需要；已装好 `.venv` 的机器可忽略）；
 3. **CG 引擎**：自动下载，或已有可用的 `CG_GUI/`（含 `calibguard/`、`models/`、`.venv`）。
 
+### 方式 0：桌面端「添加插件」（最省事，推荐）
+
+DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一种即可（装完按提示重启 DSH）：
+
+| 填什么 | 示例 | 说明 |
+|---|---|---|
+| **GitHub 仓库地址**（推荐） | `https://github.com/maomitgd2006/DSH_CG` | 自动拉取源码并登记到当前 profile 的 bundle |
+| **本地目录路径** | `J:\CG\DSH_CG` | 已 clone / 解压到本机时用 |
+| 包名 | `dsh-calibguard` | 需要 npm 上已发布；**当前尚未发布到 npm**（见下） |
+
+> 等价命令行（已实测：安装后 DSH 会自动把包加进 profile 的 `dsh.profile.bundles`）：
+>
+> ```powershell
+> dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG
+> dsh plugin --profile <profile> add file:J:\CG\DSH_CG
+> ```
+>
+> 包名安装的前提是发布到 npm：维护者执行 `npm login` 后 `npm publish`（`package.json` 已配好
+> `files` 与 `publishConfig`，包名 `dsh-calibguard` 当前在 npm 上未被占用）。
+
+**无论用哪种方式**，装好后首次运行都不需要手动装引擎——插件会自动准备（见下一节）。
+
 ### 方式 A：源码方式（`file://` 行，无需安装）
 
 在 profile 的 `cordis.patch.yml` 末尾追加（路径改成你的实际位置）：

@@ -1,7 +1,9 @@
 {
   "name": "dsh-calibguard",
   "version": "0.2.0",
-  "private": true,
+  "publishConfig": {
+    "access": "public"
+  },
   "description": "CalibGuard file-security auditing for DeepSeek Harness: a locally calibrated CodeBERT gate exposed as agent tools, with on-demand cloud LLM review of the gray zone.",
   "keywords": [
     "dsh",

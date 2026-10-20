@@ -84,6 +84,29 @@ once (depends on network and pip mirror).
 2. **64-bit Python 3.10–3.12** (needed for the one-time dependency install; irrelevant if `.venv` already exists);
 3. **The CG engine** — downloaded automatically, or an existing `CG_GUI/` (with `calibguard/`, `models/` and `.venv`).
 
+### Option 0 — desktop "Add plugin" dialog (easiest, recommended)
+
+DSH desktop → Settings → **Add plugin**, paste any one of the following (restart DSH afterwards):
+
+| Paste | Example | Notes |
+|---|---|---|
+| **GitHub repository URL** (recommended) | `https://github.com/maomitgd2006/DSH_CG` | Fetches the source and registers the bundle in the current profile |
+| **Local directory path** | `J:\CG\DSH_CG` | For a local clone / extracted copy |
+| Package name | `dsh-calibguard` | Requires an npm release; **not published to npm yet** (see below) |
+
+> Equivalent CLI (verified: after install DSH automatically appends the package to the profile's
+> `dsh.profile.bundles`):
+>
+> ```powershell
+> dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG
+> dsh plugin --profile <profile> add file:J:\CG\DSH_CG
+> ```
+>
+> Package-name installs require an npm release: the maintainer runs `npm login` then `npm publish`
+> (`package.json` already has `files`/`publishConfig`; the name `dsh-calibguard` is currently free on npm).
+
+**Whichever way you install it**, the first run prepares the engine automatically (next section) — no manual setup needed.
+
 ### Option A — source mode (a `file://` loader row, no install)
 
 Append to the profile's `cordis.patch.yml` (replace the path with yours):
