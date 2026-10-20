@@ -45,37 +45,36 @@
 
 ## 安装
 
-### 0) 一键准备引擎（从 Release 下载的用户必做）
+### 0) 引擎依赖：**首次运行自动补齐**（对齐 CG_GUI 的「首启装环境」）
 
-本插件只是"壳"：审计引擎（`calibguard/` 代码 + **475 MB 模型权重**）和 Python 依赖要单独准备。
-发行包里带了安装器，**一条命令**搞定：
+本插件只是"壳"：审计引擎（`calibguard/` + **475 MB 模型权重**）和 Python 依赖需要就位。
+**不用手动装**——装好插件重启 DSH 后，若检测到缺少 `<engineRoot>/.venv`，插件会在**后台自动**：
 
-```powershell
-node setup.mjs
-```
+1. 下载 CG 官方发行包 `CalibGuard-GUI.zip`（约 467 MB）并解压为**本包同级的 `CG_GUI/`**；
+2. 创建 `.venv`（需要 **64 位 Python 3.10–3.12**，没有会明确报错说明原因）；
+3. 按 `requirements-gui.txt` 安装依赖（约 1–3 GB）；
+4. 就绪后工具/面板自动可用。
 
-它会（可重复执行，已完成的步骤自动跳过）：
+**进度在哪看**：面板顶部会出现「首次运行：正在自动准备引擎与依赖」卡片（含当前步骤与输出尾巴）；
+宿主日志里是 `[calibguard]` 开头的行。准备期间审计按钮不可用，完成后点「刷新状态」即可。
+首次约需 **10–20 分钟**（取决于网速和 pip 源），只需一次。
 
-1. 下载 CG 官方发行包 `CalibGuard-GUI.zip`（约 467 MB）并解压到**本包同级的 `CG_GUI/`**；
-2. 在该目录创建 `.venv`（需要 **64 位 Python 3.10–3.12**，脚本会自动检测并说明原因）；
-3. 按 `requirements-gui.txt` 安装依赖（torch / transformers / scikit-learn / openai …，约 1–3 GB）；
-4. 跑一次桥接自检，打印设备定档、模型、阈值结果。
-
-```powershell
-node setup.mjs --help                          # 全部参数
-node setup.mjs --from D:\CalibGuard-GUI.zip    # 已手动下载过发行包，不联网
-node setup.mjs --dest D:\CG_GUI                # 装到自定义位置（之后配置 engineRoot）
-```
-
-> 磁盘预估：约 **467 MB 下载 + 480 MB 解压 + 1–3 GB 依赖**；只装 CPU 版 torch 即可
-> （低算力显卡本来也会被定档到 CPU）。
-> 已有引擎（例如 `CG_GUI/` 就在旁边）可跳过这一步。
+> 想提前预热、或断网/锁网环境需要离线安装，也可以手动跑安装器（同一套逻辑，幂等）：
+>
+> ```powershell
+> node setup.mjs                          # 一键：下载 → 解压 → venv → 依赖 → 自检
+> node setup.mjs --from D:\CalibGuard-GUI.zip   # 用已下载的发行包，不联网
+> node setup.mjs --dest D:\CG_GUI         # 装到自定义位置（之后配置 engineRoot）
+> ```
+>
+> 已有可用 `CG_GUI/`（含 `.venv`）的机器不会重复安装。
+> 如果不想让插件自动联网，把插件配置 `autoSetup` 设为 `false`（此时缺环境会直接报错并提示手动安装）。
 
 ### 前提
 
 1. **DSH**（DeepSeek Harness）0.1.5-rc.2 实测可用；
-2. **CG 引擎**：已经用上面的 `node setup.mjs` 准备好，或已有可用的 `CG_GUI/`
-   （含 `calibguard/`、`models/`、`.venv`；也可以 clone [P-436/CG](https://github.com/P-436/CG) 自行准备）。
+2. **Python 64 位 3.10–3.12**（首次自动安装依赖需要；已装好 `.venv` 的机器可忽略）；
+3. **CG 引擎**：自动下载，或已有可用的 `CG_GUI/`（含 `calibguard/`、`models/`、`.venv`）。
 
 ### 方式 A：源码方式（`file://` 行，无需安装）
 
@@ -183,6 +182,7 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | `device` | `auto` | 自动做「CUDA 版本 + 算力」双检，低算力显卡回落 CPU |
 | `credentialRef` | `''` | 推荐的云端复核凭据引用名，如 `DEEPSEEK_API_KEY`（交给 DSH 凭据库解析） |
 | `announceToModel` | `true` | 是否把「何时该用 CalibGuard」写进系统提示词 |
+| `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**下载引擎并安装依赖；设 `false` 则只报错提示手动 `node setup.mjs` |
 | `maxFiles` | `20` | 目录展开上限；显式给出/上传的文件不受限 |
 
 ---
@@ -192,6 +192,7 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | 现象 | 处理 |
 |---|---|
 | 侧边栏没有图标 / 面板报 `not found` | 客户端与路由在宿主启动时加载：**重启 DSH** |
+| **首次运行要等十几分钟** | 正常：首次自动下载引擎（467 MB）并安装依赖（1–3 GB）；面板顶部有进度卡片，只需一次 |
 | 首次审计很慢 | 正常：要加载约 475 MB 权重（之后走常驻进程） |
 | 大文件审计几十秒 | 正常：全文滑窗逐窗推理，见 [docs/performance.md](docs/performance.md) |
 | 灰区全部转人工 | 没配凭据：设 `credentialRef`（推荐）或在 DSH Models 页配置 |

@@ -23,8 +23,10 @@ function fakeEngine(overrides = {}) {
   return {
     calls,
     settings() { return overrides.settings ?? {} },
+    environment() { return overrides.environment ?? null },
     async inspect() {
       calls.push({ kind: 'inspect' })
+      if (overrides.inspectError) throw new Error(overrides.inspectError)
       return overrides.status ?? {
         engineRoot: config.engineRoot,
         device: 'cpu',
@@ -114,6 +116,41 @@ test('非 GET 访问 /status 返回 405', async () => {
   const { routes } = createCalibGuardRoutes({ engine: fakeEngine(), config })
   const { res } = await invoke(routeOf(routes, 'status').handler, fakeRequest({ method: 'POST' }))
   assert.equal(res.statusCode, 405)
+})
+
+test('GET /status：首次运行环境准备中 → 200 + environment 进度（不报 500）', async () => {
+  const engine = fakeEngine({
+    environment: {
+      state: 'running',
+      step: '安装 Python 依赖',
+      message: '安装 Python 依赖（首次约 1–3 GB…）',
+      venvReady: false,
+      tail: ['== 安装 Python 依赖（首次约 1–3 GB，可能几分钟） =='],
+    },
+    inspectError: '首次运行需要准备引擎与依赖（正在后台进行…）',
+  })
+  const { routes } = createCalibGuardRoutes({ engine, config })
+  const { res, json } = await invoke(routeOf(routes, 'status').handler, fakeRequest())
+  assert.equal(res.statusCode, 200)
+  assert.equal(json.ok, true)
+  assert.equal(json.status, null)
+  assert.equal(json.environment.state, 'running')
+  assert.equal(json.environment.venvReady, false)
+  assert.match(json.environment.message, /依赖/)
+  // 准备期间不应去调 inspect（避免 10 分钟阻塞链路）
+  assert.equal(engine.calls.some((item) => item.kind === 'inspect'), false)
+})
+
+test('GET /status：环境准备完成但引擎仍未就绪 → 200 + error 字段（面板可展示原因）', async () => {
+  const engine = fakeEngine({
+    environment: { state: 'ready', venvReady: true, message: '环境已就绪' },
+    inspectError: '引擎目录下找不到 calibguard 包',
+  })
+  const { routes } = createCalibGuardRoutes({ engine, config })
+  const { res, json } = await invoke(routeOf(routes, 'status').handler, fakeRequest())
+  assert.equal(res.statusCode, 200)
+  assert.equal(json.status, null)
+  assert.match(json.error, /calibguard/)
 })
 
 test('POST /audit：paths + options 透传，阈值被采纳', async () => {

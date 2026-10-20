@@ -9,6 +9,8 @@
 | 每份文件都 `manual_review` + `CUDA error: no kernel image` | 设备定档失效：确认 `device` 未被强制成 `cuda` |
 | 灰区全部转人工、`llm.status=api_error` | 没配凭据（预期降级）→ 设 `credentialRef`（推荐）或在 DSH Models 页配置 |
 | `凭据引用 X 未配置` 告警 | `credentialRef` 指向的引用在 DSH 凭据库里没有值；在 Models 页填 Key 或用 `llmApiKey` |
+| **首次运行卡在"正在准备环境"** | 正常：首次自动下载引擎（467 MB）+ 装依赖（1–3 GB），约 10–20 分钟；面板顶部有进度与输出尾巴 |
+| 环境准备失败 | 面板会显示失败原因与最后几行输出；在本插件目录跑 `node setup.mjs` 看完整输出后重试（也支持 `--from` 离线包） |
 | 首次审计很久 | 正常：加载约 475 MB 权重；之后走常驻进程 |
 | 大文件审计几十秒 | 正常：耗时 ≈ 窗口数 ÷ CPU 吞吐，见 [performance.md](performance.md) |
 | **侧边栏没有 CalibGuard 图标** | 客户端 bundle 在**宿主启动时**扫描：改完 `dsh.client`/`lib/client.js` 必须**重启 DSH**；并确认 `package.json` 的 `name` 与 bundle `id` 一致 |

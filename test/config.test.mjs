@@ -23,6 +23,14 @@ test('空配置 → 全部默认值，且引擎目录自动推导为同级 CG_GU
   assert.equal(config.allowThreshold, null)
   assert.equal(config.llmEnabled, null)
   assert.equal(config.packageRoot.endsWith('DSH_CG'), true)
+  // 首启自动装环境（对齐 CG_GUI launcher 行为）默认开启
+  assert.equal(config.autoSetup, true)
+})
+
+test('autoSetup 可显式关闭（关闭后缺 venv 时报错而不是自动安装）', () => {
+  assert.equal(normalizeConfig({ autoSetup: false }).autoSetup, false)
+  assert.equal(normalizeConfig({ autoSetup: true }).autoSetup, true)
+  assert.throws(() => normalizeConfig({ autoSetup: 'yes' }), /autoSetup/)
 })
 
 test('显式配置覆盖默认值，并解析为绝对路径', () => {

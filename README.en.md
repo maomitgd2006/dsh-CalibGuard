@@ -50,37 +50,39 @@ file sha256, and the report path.
 
 ## Install
 
-### 0) One-command engine setup (required if you downloaded the release)
+### 0) Engine dependencies: prepared automatically on first run (like CG_GUI's launcher)
 
-This plugin is only the wrapper: the auditing engine (`calibguard/` code + **475 MB of model weights**)
-and its Python dependencies must be prepared separately. The release ships an installer — one command:
+This plugin is only the wrapper: the auditing engine (`calibguard/` + **475 MB of model weights**) and its
+Python dependencies must be present. **You don't install them by hand.** After you install the plugin and
+restart DSH, if `<engineRoot>/.venv` is missing the plugin automatically, in the background:
 
-```powershell
-node setup.mjs
-```
+1. downloads the official CG release `CalibGuard-GUI.zip` (~467 MB) and extracts it to `CG_GUI/`
+   **next to this package**;
+2. creates `.venv` (requires **64-bit Python 3.10–3.12**; it fails with a clear explanation otherwise);
+3. installs dependencies from `requirements-gui.txt` (1–3 GB);
+4. becomes ready — tools and the panel just work.
 
-It is idempotent and will:
+**Where to watch progress**: the panel shows a "First run: preparing engine and dependencies" card with
+the current step and the tail of the installer output; host logs show `[calibguard]` lines. The audit
+button stays disabled until it is ready — press "刷新状态 / Refresh" afterwards. Expect **10–20 minutes**
+once (depends on network and pip mirror).
 
-1. download the official CG release `CalibGuard-GUI.zip` (~467 MB) and extract it to `CG_GUI/` **next to
-   this package**;
-2. create `.venv` there (requires **64-bit Python 3.10–3.12**; the script detects and explains);
-3. install dependencies from `requirements-gui.txt` (torch / transformers / scikit-learn / openai …, 1–3 GB);
-4. run a bridge self-check and print the device tier, model and threshold status.
-
-```powershell
-node setup.mjs --help                          # all options
-node setup.mjs --from D:\CalibGuard-GUI.zip    # use a manually downloaded release zip (offline)
-node setup.mjs --dest D:\CG_GUI                # custom location (then configure engineRoot)
-```
-
-> Disk estimate: **467 MB download + 480 MB extracted + 1–3 GB dependencies**. CPU-only torch is enough
-> (low-end GPUs are tiered down to CPU anyway). Skip this step if you already have a working `CG_GUI/`.
+> You can also pre-warm, or install offline, by running the same installer manually (idempotent):
+>
+> ```powershell
+> node setup.mjs                          # download → extract → venv → deps → self-check
+> node setup.mjs --from D:\CalibGuard-GUI.zip   # use an already-downloaded release zip (offline)
+> node setup.mjs --dest D:\CG_GUI         # custom location (then configure engineRoot)
+> ```
+>
+> Machines that already have a working `CG_GUI/` (with `.venv`) are not touched.
+> To disable the auto-download entirely, set the plugin option `autoSetup: false`.
 
 ### Prerequisites
 
 1. **DSH** (DeepSeek Harness) — verified on 0.1.5-rc.2;
-2. **The CG engine** — prepared by `node setup.mjs` above, or an existing `CG_GUI/` (with `calibguard/`,
-   `models/` and `.venv`; you can also clone [P-436/CG](https://github.com/P-436/CG) and set it up yourself).
+2. **64-bit Python 3.10–3.12** (needed for the one-time dependency install; irrelevant if `.venv` already exists);
+3. **The CG engine** — downloaded automatically, or an existing `CG_GUI/` (with `calibguard/`, `models/` and `.venv`).
 
 ### Option A — source mode (a `file://` loader row, no install)
 
@@ -190,6 +192,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | `device` | `auto` | Checks both CUDA build and compute capability; low-end GPUs fall back to CPU |
 | `credentialRef` | `''` | Recommended credential reference name, e.g. `DEEPSEEK_API_KEY` (resolved via the DSH credential store) |
 | `announceToModel` | `true` | Add "when to use CalibGuard" to the system prompt |
+| `autoSetup` | `true` | On first run, automatically download the engine and install Python deps when `.venv` is missing; set `false` to only fail with instructions |
 | `maxFiles` | `20` | Directory recursion cap; explicitly given/uploaded files are not capped |
 
 ---
@@ -199,6 +202,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | Symptom | Fix |
 |---|---|
 | No sidebar icon / panel says `not found` | Client bundle and routes load at host startup: **restart DSH** |
+| **First run takes 10–20 minutes** | Normal: the engine (467 MB) is downloaded and dependencies (1–3 GB) are installed once; the panel shows progress |
 | First audit is slow | Normal: ~475 MB of weights are loaded once (then the process stays resident) |
 | Big file takes tens of seconds | Normal: full-text sliding-window inference; see [docs/performance.md](docs/performance.md) |
 | Gray zone always goes to manual review | No credential configured: set `credentialRef` (recommended) or configure it in DSH Models |
