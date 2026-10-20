@@ -1,21 +1,24 @@
 # 通过 npm Trusted Publishing（GitHub Actions OIDC）发布到 npm —— 不需要 token、不需要 OTP。
 #
-# 前置（一次性，在 npm 网页配置）：
-#   npmjs.com → 包 dsh-calibguard → Settings → Trusted Publisher → GitHub Actions
-#     Organization or user: maomitgd2006
-#     Repository:            DSH_CG
-#     Workflow filename:     publish.yml
-#     Allowed actions:       Allow `npm publish`
-#   然后点 "Set up connection"。
+# ⚠️ 当前状态：**未启用**（暂用手工 `npm publish` + bypass token 发布）。
+#    启用步骤（一次性）：
+#      npmjs.com → 包 dsh-calibguard → Settings → Trusted Publisher → GitHub Actions
+#        Organization or user: maomitgd2006
+#        Repository:            DSH_CG
+#        Workflow filename:     publish.yml
+#        Allowed actions:       Allow `npm publish`
+#      然后点 "Set up connection"，再把下面 on.push.tags 打开即可自动发布。
+#    未配置时请勿手动触发本 workflow：npm 会返回 404（OIDC 身份不被认可）。
 #
-# 之后：Actions 页手动运行本 workflow，或推送 v* tag 自动发布。
+# 使用：Actions 页手动 Run workflow（配置好 Trusted Publisher 之后）。
 name: publish
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
+  # 配置 Trusted Publisher 后可启用 tag 自动发布：
+  # push:
+  #   tags:
+  #     - 'v*'
 
 permissions:
   contents: read
@@ -25,20 +28,27 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      # npm 可信发布要求 npm >= 11.5.1；Node 24 自带的 npm 已满足
+      # 已发布的版本不要重复发（避免手动 rerun 时 409）
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-          registry-url: 'https://registry.npmjs.org'
 
-      - name: Show toolchain
+      - name: Skip if version already published
+        id: check
         run: |
-          node -v
-          npm -v
+          VERSION=$(node -p "require('./package.json').version")
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          if npm view "dsh-calibguard@$VERSION" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::dsh-calibguard@$VERSION 已存在，跳过发布"
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Pack sanity check（包内容不应含 test/）
+        if: steps.check.outputs.already == 'false'
         run: |
           npm pack --dry-run 2>&1 | tee /tmp/pack.txt
           if grep -E '^npm notice .* (test/|scripts/)' /tmp/pack.txt; then
@@ -47,4 +57,5 @@ jobs:
           fi
 
       - name: Publish (OIDC, with provenance)
+        if: steps.check.outputs.already == 'false'
         run: npm publish --provenance --access public
