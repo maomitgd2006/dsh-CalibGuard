@@ -13,6 +13,17 @@
 > 原封不动地跑在一个常驻 Python 子进程里（见 `bridge/calibguard_bridge.py`），
 > Node 侧只负责**进程管理 + 协议 + 工具/路由暴露**，浏览器侧只负责**拖拽与展示**。
 
+## 相关仓库
+
+| 仓库 | 内容 |
+|---|---|
+| [maomitgd2006/DSH_CG](https://github.com/maomitgd2006/DSH_CG) | **本仓库**：DSH 插件 —— 宿主侧工具/服务/路由 + 浏览器面板 + Python 桥接 |
+| [maomitgd2006/CG](https://github.com/maomitgd2006/CG) | 引擎与基准：`CG_GUI/`（桌面壳 + `calibguard/` 引擎 + 模型）、`CG_Bench/`（训练/评测）、模型与数据说明 |
+
+> 本插件的运行前提：本机有 CG 仓库的 `CG_GUI/`（含 `.venv` 与模型权重，不入库）。
+> 插件配置项 `engineRoot` 默认取**本包同级目录**的 `CG_GUI`，也可显式指定任意路径。
+> 版本记录见 [Releases](https://github.com/maomitgd2006/DSH_CG/releases)。
+
 ---
 
 ## 一、装了什么
