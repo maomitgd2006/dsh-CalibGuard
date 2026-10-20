@@ -26,7 +26,10 @@
     "lib",
     "bridge",
     "cordis.patch.yml",
-    "README.md"
+    "docs",
+    "README.md",
+    "README.en.md",
+    "LICENSE"
   ],
   "engines": {
     "node": ">=20"

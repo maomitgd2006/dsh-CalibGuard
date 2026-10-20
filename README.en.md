@@ -1,0 +1,219 @@
+# dsh-calibguard
+
+English | [中文](README.md)
+
+![license](https://img.shields.io/badge/license-MIT-green)
+![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
+![tests](https://img.shields.io/badge/tests-87%20passed-brightgreen)
+
+Plugs the [CalibGuard](https://github.com/P-436/CG) file-security auditing engine into
+**DeepSeek Harness (DSH)**: the agent screens untrusted code *locally* before running or installing it,
+and you can also drag files into a sidebar panel for the same audit.
+
+- 🔒 **Offline by default** — a local CodeBERT model plus Platt calibration yields an interpretable
+  "malicious probability"; file contents never leave the machine;
+- ☁️ **Cloud review only for the gray zone** — only files the local model is unsure about trigger one
+  cloud LLM call (can be disabled);
+- 🧭 **Four verdicts** — allow / suspicious / block / manual review, with evidence and a Markdown report;
+- 🧰 **Two interfaces** — agent tools (`calibguard_audit` / `calibguard_status`) and a browser panel;
+- ⚙️ **One set of settings** — saved in the panel, used by the AI too.
+
+> This repository is only the **DSH plugin**. The auditing engine lives in the
+> [CG](https://github.com/P-436/CG) repository under `CG_GUI/`; it is neither copied nor modified here —
+> the plugin runs it in a persistent Python child process.
+
+---
+
+## What it is for
+
+| Scenario | How you use it | What you get |
+|---|---|---|
+| The agent is about to run a downloaded script/installer | Ask: "audit `D:\downloads\setup.py` before installing" | A verdict + triggering evidence + report path; the agent decides whether to proceed |
+| You want to check a suspicious file or archive | Drag it into the sidebar panel | Per-file verdicts, sorted, with a clickable Markdown report |
+| Audit a whole directory | Paste a host directory path | Recursive per-file audit (truncation is reported explicitly) |
+| You don't want code sent to the cloud | Offline by default; toggle cloud review off | Fully local inference, gray zone split at 0.5 |
+| You want a stricter/cheaper policy | Tune thresholds and delivery in the panel, then save | The panel and the AI share the same policy |
+
+## Reading a verdict
+
+| Label | Meaning | Suggested action |
+|---|---|---|
+| **BLOCK** | Locally high-confidence malicious | Do not run it; read the evidence |
+| **MANUAL** | Uncertain / cloud review failed | Human review, or retry with another delivery mode |
+| **SUSPICIOUS** | Medium probability; could be dangerous APIs inside a legitimate library | Combine with the report; compressed third-party libs often land here or in BLOCK (see FAQ) |
+| **ALLOW** | Locally judged safe | Proceed |
+
+Each result also carries the calibrated `p`, the inference device (cpu/cuda), window count,
+file sha256, and the report path.
+
+---
+
+## Install
+
+### Prerequisites
+
+1. **DSH** (DeepSeek Harness) — verified on 0.1.5-rc.2;
+2. **The CG engine** — clone [P-436/CG](https://github.com/P-436/CG) and prepare `.venv` plus model
+   weights under `CG_GUI/` (running `CG_GUI/launcher.py` once installs the environment; model weights in
+   `CG_GUI/models/` are not committed — see the CG README).
+
+### Option A — source mode (a `file://` loader row, no install)
+
+Append to the profile's `cordis.patch.yml` (replace the path with yours):
+
+```yaml
+- insert:
+    - id: calibguard
+      name: 'file:///<absolute path to this package>/lib/index.js'
+      config:
+        enabled: true
+        device: auto
+        announceToModel: true
+```
+
+The `insert` path is rewritten to a `file://` URL by DSH. On desktop the profile lives at
+`<DSH_HOME>/profiles/desktop/cordis.patch.yml` (`<DSH_HOME>` defaults to `~/.dsh`).
+
+Optional: `node scripts/link-dsh.mjs` junctions DSH's own `@deepseek-ai/*` packages into this package so
+the optional `defineTool` / Config schema support is active (everything still works without it).
+
+### Option B — install into a profile
+
+```powershell
+dsh plugin --profile <profile> add file:<absolute path to this package>
+```
+
+Then insert the loader row as above, using the package name `dsh-calibguard` as `name`.
+(The `desktop` profile is managed exclusively by the Electron app — desktop users must use Option A.)
+
+### Verify
+
+- After restarting DSH a shield icon appears in the sidebar; the panel header shows
+  engine / thresholds / cloud-review status;
+- Or ask the agent to call `calibguard_status` — it reports device, model, thresholds and credential state;
+- Command-line self-check (bypasses DSH, tests the engine directly):
+
+```powershell
+node scripts/bridge-selftest.mjs                        # engine status only
+node scripts/bridge-selftest.mjs "<engineRoot>/samples" # status + a trial audit
+```
+
+> ⚠️ Restart DSH after changing the patch or the panel code: the client bundle is loaded at host
+> startup and ESM modules are cached.
+
+---
+
+## Usage
+
+### 1) Let the agent audit (tool calls)
+
+Just ask in natural language; the agent calls `calibguard_audit`:
+
+```
+"Audit D:\downloads\setup.py before installing it."
+"Is this archive safe? D:\downloads\vendor.zip"
+"Go through D:\projects\vendor and flag anything suspicious."
+```
+
+The agent sees the full verdict, evidence and report path. It can also override thresholds for a single
+call (without touching your saved settings).
+
+### 2) The panel (browser UI)
+
+Sidebar shield icon → **drop files onto the dashed area** (or pick files, or paste host paths) → "开始审计" (Start).
+
+- Archives are unpacked in memory and audited file by file; uploads are written to a temp dir and deleted afterwards;
+- Large files get an ETA based on measured throughput (e.g. "287 windows, ~76 s"), so it never looks hung;
+- Results are sorted by severity; click "查看 Markdown 报告" to read the report.
+
+### 3) Shared settings (panel ↔ AI)
+
+The panel's settings section mirrors CG_GUI: **cloud-review toggle → API Key / Base URL / model name /
+content source / delivery mode (with the matching truncation or sliding-window fields) → gray zone**.
+
+After pressing Save:
+
+- values are written to `$DSH_HOME/calibguard-settings.json` (defaults to `~/.dsh`, never committed);
+- **the AI uses the same values** (precedence: plugin config < shared settings < per-call options);
+- changes take effect immediately, no restart;
+- the API key goes into the DSH credential store (`ctx.credentials`), not into that settings file.
+
+### 4) Tool parameters (per-call, advanced)
+
+| Parameter | Description |
+|---|---|
+| `paths` | Required; absolute file or directory paths |
+| `include_evidence` | Return evidence details (default `true`) |
+| `max_files` | Directory recursion cap (default 20, 1–200) |
+| `allow_threshold` / `block_threshold` | Gray-zone bounds for this call (0 < p < 1) |
+| `llm_enabled` | Enable cloud review for this call |
+| `llm_content_source` | `evidence` (distilled) / `raw` (preprocessed text) |
+| `llm_delivery_mode` | `truncate` / `window` / `all` |
+| `truncate_chars` / `window_chars` / `window_overlap` | Cloud-delivery chunking |
+| `window_stride` | Model-side sliding-window stride (1–511, default 256; 510 speeds up big files) |
+
+---
+
+## Configuration
+
+Common keys of the loader row `config` (full table: [docs/configuration.md](docs/configuration.md)):
+
+| Key | Default | Description |
+|---|---|---|
+| `enabled` | `true` | When false nothing is registered (no need to remove the row) |
+| `engineRoot` | `''` | CG_GUI directory; empty = the `CG_GUI` next to this package |
+| `device` | `auto` | Checks both CUDA build and compute capability; low-end GPUs fall back to CPU |
+| `credentialRef` | `''` | Recommended credential reference name, e.g. `DEEPSEEK_API_KEY` (resolved via the DSH credential store) |
+| `announceToModel` | `true` | Add "when to use CalibGuard" to the system prompt |
+| `maxFiles` | `20` | Directory recursion cap; explicitly given/uploaded files are not capped |
+
+---
+
+## FAQ
+
+| Symptom | Fix |
+|---|---|
+| No sidebar icon / panel says `not found` | Client bundle and routes load at host startup: **restart DSH** |
+| First audit is slow | Normal: ~475 MB of weights are loaded once (then the process stays resident) |
+| Big file takes tens of seconds | Normal: full-text sliding-window inference; see [docs/performance.md](docs/performance.md) |
+| Gray zone always goes to manual review | No credential configured: set `credentialRef` (recommended) or configure it in DSH Models |
+| A legitimate third-party library is BLOCKed | Minified libraries are full of eval/base64 patterns and the corpus is Python-heavy — known false-positive tendency, see [docs/troubleshooting.md](docs/troubleshooting.md) |
+| Panel returns 401/403 | Browser session isn't authenticated with the host: refresh / sign in again |
+| The AI ignores changed settings | Press Save in the panel; editing fields without saving applies to that run only |
+
+Full troubleshooting table: [docs/troubleshooting.md](docs/troubleshooting.md).
+
+---
+
+## Layout
+
+```
+DSH_CG/
+├── lib/                 Node side: plugin entry, engine manager, tools, routes, settings, browser panel
+├── bridge/              Python bridge: persistent child process, line-delimited JSON protocol
+├── cordis.patch.yml     Bundle patch (inserts the loader row)
+├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
+├── test/                node --test (87 cases; auto-skip when the engine env is missing)
+└── docs/                configuration, performance, troubleshooting, plugin contract, design notes
+```
+
+## Docs
+
+| Document | Contents |
+|---|---|
+| [docs/configuration.md](docs/configuration.md) | Full option table, precedence, credential sources, shared settings |
+| [docs/performance.md](docs/performance.md) | Why big files are slow, the two sliding windows (size/stride/overlap), speed-ups, `maxFiles` semantics |
+| [docs/troubleshooting.md](docs/troubleshooting.md) | Troubleshooting table, panel error decoding |
+| [docs/design-notes.md](docs/design-notes.md) | Three key design decisions (device tiering / credentials / client half) and the protocol |
+| [docs/dsh-plugin-contract.md](docs/dsh-plugin-contract.md) | DSH plugin contract cheat-sheet extracted from 0.1.5-rc.2 (Chinese) |
+
+## Related repositories
+
+| Repository | Contents |
+|---|---|
+| **maomitgd2006/DSH_CG** (this repo) | DSH plugin: tools / service / routes + browser panel + Python bridge |
+| [P-436/CG](https://github.com/P-436/CG) | Engine and benchmark: `CG_GUI/` (desktop shell + engine + model), `CG_Bench/` (training/eval) |
+
+## License
+
+[MIT](LICENSE) © 2026 maomitgd
