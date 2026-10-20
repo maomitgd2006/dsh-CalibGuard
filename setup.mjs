@@ -18,10 +18,11 @@
  *
  * 无第三方依赖，只用 Node 内置模块；下载走 Node 20+ 的 fetch。
  */
-import { createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import { chmodSync, copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import { homedir } from 'node:os'
 import { Readable } from 'node:stream'
 
 const PKG_ROOT = dirname(fileURLToPath(import.meta.url))
@@ -84,6 +85,8 @@ function parseArgs(argv) {
     skipInstall: false,
     skipVerify: false,
     force: false,
+    noPortablePython: false,
+    forcePortablePython: false,
     help: false,
   }
   for (let i = 0; i < argv.length; i += 1) {
@@ -104,6 +107,8 @@ function parseArgs(argv) {
       case '--skip-install': options.skipInstall = true; break
       case '--skip-verify': options.skipVerify = true; break
       case '--force': options.force = true; break
+      case '--no-portable-python': options.noPortablePython = true; break
+      case '--force-portable-python': options.forcePortablePython = true; break
       default: fail(`未知参数：${arg}（用 --help 查看用法）`)
     }
   }
@@ -126,6 +131,8 @@ function printHelp() {
   --skip-install    跳过 pip install
   --skip-verify     跳过最后的桥接自检
   --force           覆盖已有引擎目录 / 重建 venv
+  --no-portable-python  本机没有 Python 时不自动下载便携版（默认会自动下载）
+  --force-portable-python  跳过本机 Python 检测，强制用便携版（测试用）
   -h, --help        显示本帮助
 
 示例：
@@ -135,6 +142,7 @@ function printHelp() {
 
 说明：
   • 引擎约 480 MB（含 475 MB 模型权重），依赖安装另需约 1–3 GB 磁盘；
+  • 本机没有 64 位 Python 3.10–3.12 时，会自动用 uv 下载便携 Python 3.10.8（约 30 MB）；
   • 默认用 PyPI 的 CPU 版 torch 即可（低算力显卡本来也会被定档到 CPU）；
     要用 GPU 请按 PyTorch 官网自行安装对应 CUDA 轮子。
 `)
@@ -294,8 +302,146 @@ function findPython(explicit) {
     + `请安装 64 位 Python 3.12 后重试，或用 --python 指定解释器（如 --python "C:\\Python312\\python.exe"）。`)
 }
 
-function venvPython(dest) {
-  return process.platform === 'win32'
+// ============================== 便携 Python（本机没有时用 uv 自动装） ==============================
+
+/** 自动下载的便携 Python 版本（与 CG_GUI launcher 的 PYTHON_PIN 一致）。 */
+const PYTHON_PIN = '3.10.8'
+
+/** uv 与便携 Python 的存放目录：放在 DSH 主目录下，避免污染仓库；删引擎目录不影响它。 */
+function toolsDir() {
+  const dshHome = process.env.DSH_HOME && process.env.DSH_HOME.trim()
+    ? resolve(process.env.DSH_HOME.trim())
+    : join(homedir(), '.dsh')
+  return join(dshHome, 'calibguard-tools')
+}
+
+/** 当前平台对应的 uv 发行包名；不支持返回空串。 */
+function uvAssetName() {
+  const { platform, arch } = process
+  if (platform === 'win32') {
+    if (arch === 'x64') return 'uv-x86_64-pc-windows-msvc.zip'
+    if (arch === 'arm64') return 'uv-aarch64-pc-windows-msvc.zip'
+  } else if (platform === 'linux') {
+    if (arch === 'x64') return 'uv-x86_64-unknown-linux-gnu.tar.gz'
+    if (arch === 'arm64') return 'uv-aarch64-unknown-linux-gnu.tar.gz'
+  } else if (platform === 'darwin') {
+    if (arch === 'arm64') return 'uv-aarch64-apple-darwin.tar.gz'
+    if (arch === 'x64') return 'uv-x86_64-apple-darwin.tar.gz'
+  }
+  return ''
+}
+
+function findBinary(dir, name) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name)
+    if (entry.isFile() && entry.name === name) return full
+    if (entry.isDirectory()) {
+      const nested = findBinary(full, name)
+      if (nested) return nested
+    }
+  }
+  return ''
+}
+
+/** 拿到可执行的 uv：PATH 上已有就用；否则下载官方发行包并缓存。失败返回空串。 */
+async function ensureUv(dest) {
+  const binaryName = process.platform === 'win32' ? 'uv.exe' : 'uv'
+  const cached = join(toolsDir(), binaryName)
+  if (existsSync(cached)) return cached
+  const probe = spawnSync('uv', ['--version'], { encoding: 'utf8' })
+  if (!probe.error && probe.status === 0) return 'uv'
+  const asset = uvAssetName()
+  if (!asset) return ''
+  const dir = toolsDir()
+  mkdirSync(dir, { recursive: true })
+  const archive = join(dir, asset)
+  const urls = [
+    `https://github.com/astral-sh/uv/releases/latest/download/${asset}`,
+    `https://ghproxy.cn/https://github.com/astral-sh/uv/releases/latest/download/${asset}`,
+  ]
+  let downloaded = false
+  for (const url of urls) {
+    try {
+      log(`下载 uv（约 12 MB）：${url}`)
+      await download(url, archive)
+      downloaded = true
+      break
+    } catch (error) {
+      warn(`uv 下载失败（${error.message}），换下一个源再试…`)
+    }
+  }
+  if (!downloaded) return ''
+  const unpacked = join(dir, 'uv-unpacked')
+  rmSync(unpacked, { recursive: true, force: true })
+  mkdirSync(unpacked, { recursive: true })
+  extract(archive, unpacked)
+  const found = findBinary(unpacked, binaryName)
+  if (!found) {
+    rmSync(unpacked, { recursive: true, force: true })
+    rmSync(archive, { force: true })
+    return ''
+  }
+  copyFileSync(found, cached)
+  if (process.platform !== 'win32') {
+    try { chmodSync(cached, 0o755) } catch { /* 某些文件系统不支持，忽略 */ }
+  }
+  rmSync(unpacked, { recursive: true, force: true })
+  rmSync(archive, { force: true })
+  log('✓ uv 已就绪')
+  return cached
+}
+
+/** 用 uv 下载便携 Python 并创建带 pip 的 venv；成功返回 true。 */
+async function installPortablePython(uv, dest) {
+  const dir = toolsDir()
+  const pythonDir = join(dir, 'python')
+  mkdirSync(pythonDir, { recursive: true })
+  const baseEnv = {
+    ...process.env,
+    UV_PYTHON_INSTALL_DIR: pythonDir,
+    UV_NO_MODIFY_PATH: '1',
+    PYTHONIOENCODING: 'utf-8',
+  }
+  const attempts = [
+    { label: '直连', env: baseEnv },
+    {
+      label: '镜像 ghproxy',
+      env: {
+        ...baseEnv,
+        UV_PYTHON_INSTALL_MIRROR: 'https://ghproxy.cn/https://github.com/astral-sh/python-build-standalone/releases/download',
+      },
+    },
+  ]
+  let installed = false
+  for (const attempt of attempts) {
+    log(`uv python install ${PYTHON_PIN}（${attempt.label}，约 30 MB）…`)
+    const result = spawnSync(uv, ['python', 'install', PYTHON_PIN], {
+      encoding: 'utf8',
+      env: attempt.env,
+      timeout: 15 * 60_000,
+    })
+    if (result.status === 0) { installed = true; break }
+    const tail = String(result.stderr || result.stdout || '').trim().split('\n').slice(-2).join(' / ')
+    warn(`失败：${tail || `exit ${result.status ?? 'error'}`}`)
+  }
+  if (!installed) return false
+  log('uv venv --seed（创建 .venv）…')
+  const venvDir = join(dest, '.venv')
+  rmSync(venvDir, { recursive: true, force: true })
+  const venv = spawnSync(uv, ['venv', '--seed', '--python', PYTHON_PIN, venvDir], {
+    encoding: 'utf8',
+    env: baseEnv,
+    timeout: 10 * 60_000,
+  })
+  if (venv.status !== 0) {
+    const tail = String(venv.stderr || venv.stdout || '').trim().split('\n').slice(-2).join(' / ')
+    warn(`uv venv 失败：${tail}`)
+    return false
+  }
+  return existsSync(venvPython(dest))
+}
+
+function venvPython(dest) {  return process.platform === 'win32'
     ? join(dest, '.venv', 'Scripts', 'python.exe')
     : join(dest, '.venv', 'bin', 'python')
 }
@@ -381,9 +527,27 @@ async function main() {
     log('\n跳过创建虚拟环境（--skip-venv）')
   } else {
     step('创建 Python 虚拟环境')
-    const found = findPython(options.python)
-    log(`使用 Python：${found.label}（${found.version}）`)
-    run(found.cmd, [...found.args, '-m', 'venv', join(options.dest, '.venv')])
+    const found = options.forcePortablePython ? null : findPython(options.python)
+    if (found) {
+      log(`使用本机 Python：${found.label}（${found.version}）`)
+      run(found.cmd, [...found.args, '-m', 'venv', join(options.dest, '.venv')])
+    } else if (options.noPortablePython) {
+      fail('本机没有 64 位 Python 3.10–3.12，且已指定 --no-portable-python。'
+        + '请安装后再试：https://www.python.org/downloads/（或用 --python 指定解释器）')
+    } else {
+      log('本机没有可用的 64 位 Python 3.10–3.12，自动下载便携版（首次约 30 MB）…')
+      const uv = await ensureUv(options.dest)
+      if (!uv) {
+        fail('自动获取 uv 失败，无法下载便携 Python。请手动安装 64 位 Python 3.12 后重试：'
+          + 'https://www.python.org/downloads/')
+      }
+      const ok = await installPortablePython(uv, options.dest)
+      if (!ok) {
+        fail('自动安装便携 Python 失败。请手动安装 64 位 Python 3.12 后重试：'
+          + 'https://www.python.org/downloads/')
+      }
+      log(`✓ 便携 Python ${PYTHON_PIN} 已就绪（${join(toolsDir(), 'python')}）`)
+    }
     if (!existsSync(python)) fail(`虚拟环境创建后找不到解释器：${python}`)
     log('✓ 虚拟环境已创建')
   }

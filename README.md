@@ -52,7 +52,7 @@
 **不用手动装**——装好插件重启 DSH 后，若检测到缺少 `<engineRoot>/.venv`，插件会在**后台自动**：
 
 1. 下载 CG 官方发行包 `CalibGuard-GUI.zip`（约 467 MB）并解压为**本包同级的 `CG_GUI/`**；
-2. 创建 `.venv`（需要 **64 位 Python 3.10–3.12**，没有会明确报错说明原因）；
+2. 创建 `.venv`（**不需要你预装 Python**：本机没有 64 位 3.10–3.12 时会自动下载便携 Python 3.10.8，约 30 MB）；
 3. 按 `requirements-gui.txt` 安装依赖（约 1–3 GB）；
 4. 就绪后工具/面板自动可用。
 
@@ -74,7 +74,7 @@
 ### 前提
 
 1. **DSH**（DeepSeek Harness）0.1.5-rc.2 实测可用；
-2. **Python 64 位 3.10–3.12**（首次自动安装依赖需要；已装好 `.venv` 的机器可忽略）；
+2. **Python**：无需预装——没有 64 位 3.10–3.12 时安装器会自动下载便携版（缓存在 `~/.dsh/calibguard-tools`，可用 `--no-portable-python` 关闭）；
 3. **CG 引擎**：自动下载，或已有可用的 `CG_GUI/`（含 `calibguard/`、`models/`、`.venv`）。
 
 ### 方式 0：桌面端「添加插件」（最省事，推荐）
@@ -204,7 +204,7 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | `device` | `auto` | 自动做「CUDA 版本 + 算力」双检，低算力显卡回落 CPU |
 | `credentialRef` | `''` | 推荐的云端复核凭据引用名，如 `DEEPSEEK_API_KEY`（交给 DSH 凭据库解析） |
 | `announceToModel` | `true` | 是否把「何时该用 CalibGuard」写进系统提示词 |
-| `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**下载引擎并安装依赖；设 `false` 则只报错提示手动 `node setup.mjs` |
+| `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**下载引擎、按需下载便携 Python、安装依赖；设 `false` 则只报错提示手动 `node setup.mjs` |
 | `maxFiles` | `20` | 目录展开上限；显式给出/上传的文件不受限 |
 
 ---

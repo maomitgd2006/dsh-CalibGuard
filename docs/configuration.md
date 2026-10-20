@@ -12,7 +12,7 @@
 | `device` | `auto` | `auto` 做「CUDA 版本 + 算力」双检；`cpu` / `cuda` 为强制 |
 | `useGuiSettings` | `true` | 复用 `CG_GUI/gui-settings.json`（与桌面壳共享阈值/云端配置） |
 | `announceToModel` | `true` | 是否把「何时该用 CalibGuard」写进系统提示词 |
-| `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**下载引擎（467 MB）并安装依赖（1–3 GB）；面板显示进度。设 `false` 则只报错并提示手动 `node setup.mjs` |
+| `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**下载引擎（467 MB）、按需下载便携 Python 3.10.8（约 30 MB，存 `~/.dsh/calibguard-tools`）并安装依赖（1–3 GB）；面板显示进度。设 `false` 则只报错并提示手动 `node setup.mjs` |
 | `maxFiles` | `20` | **目录展开上限**（1–200）：只限制"给一个目录时递归展开多少个文件"；显式给出/上传的文件全部审计 |
 | `auditTimeoutMs` | `600000` | 单次审计超时（毫秒） |
 | `idleShutdownMs` | `600000` | 空闲多久回收桥接进程（`0`=常驻不回收） |

@@ -59,7 +59,7 @@ restart DSH, if `<engineRoot>/.venv` is missing the plugin automatically, in the
 
 1. downloads the official CG release `CalibGuard-GUI.zip` (~467 MB) and extracts it to `CG_GUI/`
    **next to this package**;
-2. creates `.venv` (requires **64-bit Python 3.10–3.12**; it fails with a clear explanation otherwise);
+2. creates `.venv` (**no preinstalled Python required**: if no 64-bit 3.10–3.12 is found, a portable Python 3.10.8 is downloaded automatically, ~30 MB);
 3. installs dependencies from `requirements-gui.txt` (1–3 GB);
 4. becomes ready — tools and the panel just work.
 
@@ -82,7 +82,7 @@ once (depends on network and pip mirror).
 ### Prerequisites
 
 1. **DSH** (DeepSeek Harness) — verified on 0.1.5-rc.2;
-2. **64-bit Python 3.10–3.12** (needed for the one-time dependency install; irrelevant if `.venv` already exists);
+2. **Python**: nothing to install — when no 64-bit 3.10–3.12 is available the installer downloads a portable Python automatically (cached in `~/.dsh/calibguard-tools`; disable with `--no-portable-python`);
 3. **The CG engine** — downloaded automatically, or an existing `CG_GUI/` (with `calibguard/`, `models/` and `.venv`).
 
 ### Option 0 — desktop "Add plugin" dialog (easiest, recommended)
@@ -215,7 +215,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | `device` | `auto` | Checks both CUDA build and compute capability; low-end GPUs fall back to CPU |
 | `credentialRef` | `''` | Recommended credential reference name, e.g. `DEEPSEEK_API_KEY` (resolved via the DSH credential store) |
 | `announceToModel` | `true` | Add "when to use CalibGuard" to the system prompt |
-| `autoSetup` | `true` | On first run, automatically download the engine and install Python deps when `.venv` is missing; set `false` to only fail with instructions |
+| `autoSetup` | `true` | On first run, automatically download the engine, a portable Python when needed, and install deps; set `false` to only fail with instructions |
 | `maxFiles` | `20` | Directory recursion cap; explicitly given/uploaded files are not capped |
 
 ---
