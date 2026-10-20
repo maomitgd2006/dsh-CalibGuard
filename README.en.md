@@ -4,7 +4,8 @@ English | [中文](README.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-87%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-95%20passed-brightgreen)
+[![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 Plugs the [CalibGuard](https://github.com/P-436/CG) file-security auditing engine into
 **DeepSeek Harness (DSH)**: the agent screens untrusted code *locally* before running or installing it,
@@ -92,7 +93,7 @@ DSH desktop → Settings → **Add plugin**, paste any one of the following (res
 |---|---|---|
 | **GitHub repository URL** (recommended) | `https://github.com/maomitgd2006/DSH_CG` | Fetches the source and registers the bundle in the current profile |
 | **Local directory path** | `J:\CG\DSH_CG` | For a local clone / extracted copy |
-| Package name | `dsh-calibguard` | Requires an npm release; **not published to npm yet** (see below) |
+| Package name | `dsh-calibguard` | ✅ **Published on npm** (latest v0.2.1); just enter the package name |
 
 > Equivalent CLI (verified: after install DSH automatically appends the package to the profile's
 > `dsh.profile.bundles`):
@@ -102,8 +103,7 @@ DSH desktop → Settings → **Add plugin**, paste any one of the following (res
 > dsh plugin --profile <profile> add file:J:\CG\DSH_CG
 > ```
 >
-> Package-name installs require an npm release: the maintainer runs `npm login` then `npm publish`
-> (`package.json` already has `files`/`publishConfig`; the name `dsh-calibguard` is currently free on npm).
+> Published on npm: <https://www.npmjs.com/package/dsh-calibguard> (`npm i dsh-calibguard` also works).
 
 **Whichever way you install it**, the first run prepares the engine automatically (next section) — no manual setup needed.
 

@@ -4,7 +4,8 @@
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-87%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-95%20passed-brightgreen)
+[![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 把 [CalibGuard](https://github.com/P-436/CG) 的文件安全审计引擎接进 **DeepSeek Harness（DSH）**：
 让 AI 在执行 / 安装来路不明的代码之前先过一道**本地**门控，你也可以在侧边栏面板里直接拖文件审计。
@@ -84,7 +85,7 @@ DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一�
 |---|---|---|
 | **GitHub 仓库地址**（推荐） | `https://github.com/maomitgd2006/DSH_CG` | 自动拉取源码并登记到当前 profile 的 bundle |
 | **本地目录路径** | `J:\CG\DSH_CG` | 已 clone / 解压到本机时用 |
-| 包名 | `dsh-calibguard` | 需要 npm 上已发布；**当前尚未发布到 npm**（见下） |
+| 包名 | `dsh-calibguard` | ✅ **已发布到 npm**（最新 v0.2.1）；直接输包名即可 |
 
 > 等价命令行（已实测：安装后 DSH 会自动把包加进 profile 的 `dsh.profile.bundles`）：
 >
@@ -93,8 +94,7 @@ DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一�
 > dsh plugin --profile <profile> add file:J:\CG\DSH_CG
 > ```
 >
-> 包名安装的前提是发布到 npm：维护者执行 `npm login` 后 `npm publish`（`package.json` 已配好
-> `files` 与 `publishConfig`，包名 `dsh-calibguard` 当前在 npm 上未被占用）。
+> 包名已发布：<https://www.npmjs.com/package/dsh-calibguard>（`npm i dsh-calibguard` 亦可）。
 
 **无论用哪种方式**，装好后首次运行都不需要手动装引擎——插件会自动准备（见下一节）。
 
