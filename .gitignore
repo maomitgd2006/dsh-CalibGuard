@@ -1,0 +1,18 @@
+# 开发期依赖联接（由 scripts/link-dsh.mjs 生成，指向本机 DSH 自带的包）
+node_modules/
+.venv/
+venv/
+
+# Python 字节码（桥接进程运行后会生成）
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# 桥接进程的默认报告目录与临时报告（审计产物不入库）
+reports/
+.tmp-reports/
+*.log
+
+# 本包文档显式放行：万一被 vendored 进其它仓库（对方可能忽略 *.md）
+!README.md
+!docs/*.md

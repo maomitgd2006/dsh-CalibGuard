@@ -1,0 +1,10 @@
+# 统一行尾，避免跨平台 diff 噪声
+* text=auto eol=lf
+
+# 明确声明文本类型，便于 diff / GitHub 统计语言
+*.js    text
+*.mjs   text
+*.py    text
+*.json  text
+*.yml   text
+*.md    text

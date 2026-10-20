@@ -1,0 +1,49 @@
+{
+  "name": "dsh-calibguard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "CalibGuard file-security auditing for DeepSeek Harness: a locally calibrated CodeBERT gate exposed as agent tools, with on-demand cloud LLM review of the gray zone.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "calibguard",
+    "security",
+    "malware-detection"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/maomitgd2006/DSH_CG.git"
+  },
+  "homepage": "https://github.com/maomitgd2006/DSH_CG#readme",
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./lib/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "bridge",
+    "cordis.patch.yml",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "inject": []
+    }
+  },
+  "scripts": {
+    "test": "node --test",
+    "link-dsh": "node scripts/link-dsh.mjs",
+    "selftest": "node scripts/bridge-selftest.mjs"
+  },
+  "license": "MIT"
+}

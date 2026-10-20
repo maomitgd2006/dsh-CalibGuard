@@ -1,0 +1,58 @@
+# dsh-calibguard 组合包 patch —— 只做一件事：把插件行插进配置树。
+#
+# 用法（二选一）：
+#   A. 作为 bundle 安装：把 "dsh-calibguard" 加进 profile 的 dsh.profile.bundles，
+#      本文件里的行会被自动插入。此时 name 用包名（需能从 profile 的 node_modules 解析）。
+#   B. 直接写进 profile 的 cordis.patch.yml（源码方式，无需安装）：
+#        - insert:
+#            - id: calibguard
+#              name: 'file:///<本包绝对路径>/lib/index.js'   # 例：file:///D:/code/dsh-calibguard/lib/index.js
+#              config: { ... }
+#
+# 行内 config 与 lib/config.js 的默认值一一对应；只写想改的键即可。
+- insert:
+    - id: calibguard
+      name: 'dsh-calibguard'
+      config:
+        # 是否注册工具（false 时不注册任何东西，便于临时停用而不必删行）
+        enabled: true
+        # CalibGuard 引擎目录（含 calibguard/ 包与 models/ 的 CG_GUI 目录）；留空=自动推导为包的同级 CG_GUI
+        engineRoot: ''
+        # Python 解释器；留空=依次尝试 <engineRoot>/.venv、环境变量 DSH_CALIBGUARD_PYTHON、PATH
+        pythonPath: ''
+        # 设备定档：auto 会做「CUDA 版本 + 算力」双检，算力 < 7.5 的显卡强制回落 CPU
+        device: auto
+        # 复用 CG_GUI/gui-settings.json 里的阈值与云端复核设置（与桌面壳共享同一份配置）
+        useGuiSettings: true
+        # 是否把「何时该用 CalibGuard」写进系统提示词
+        announceToModel: true
+        # 单次审计的文件数上限与超时（毫秒）
+        maxFiles: 20
+        auditTimeoutMs: 600000
+        # 空闲多久回收桥接进程（0 = 常驻不回收）
+        idleShutdownMs: 600000
+        # 报告落盘目录；留空=引擎默认（<engineRoot>/reports）
+        reportDir: ''
+        # GUI 与 AI 共用的设置文件（面板「保存为共享设置」写这里）；
+        # 留空 = $DSH_HOME/calibguard-settings.json
+        settingsPath: ''
+        # 模型侧全文滑窗步长（token，1~511）。留空=引擎默认 256；
+        # 大文件可设 510 让窗口数约减半（代价：窗口几乎不重叠，跨边界长逻辑可能被切开）
+        # windowStride: 510
+        # 子进程环境的清洗规则：桥接进程不会继承父进程里形如
+        # *KEY*/*PASSWORD*/*SECRET*/*TOKEN* 与 DSH_* 的变量。
+        # 留空=优先用 DSH 自己的 scrubbedParentEnv，取不到时用内置启发式。
+        sensitiveEnvPattern: ''
+        # 以下留空/不写即跟随引擎默认值或 gui-settings.json
+        # allowThreshold: 0.15
+        # blockThreshold: 0.85
+        # llmEnabled: false
+        # 【推荐】云端复核凭据：交给 DSH 的 ctx.credentials 解析（继承环境 > 凭据库 > .env）。
+        # 名字写在配置里，插件代码不含硬编码凭据名，也不会隐式继承宿主环境变量。
+        # credentialRef: DEEPSEEK_API_KEY
+        # 备选：直接写字面值（不推荐，凭据会出现在配置文件里）
+        # llmApiKey: ''
+        # llmBaseUrl: ''
+        # llmModel: ''
+        # llmContentSource: evidence
+        # llmDeliveryMode: truncate
