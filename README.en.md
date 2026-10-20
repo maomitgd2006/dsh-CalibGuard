@@ -50,12 +50,37 @@ file sha256, and the report path.
 
 ## Install
 
+### 0) One-command engine setup (required if you downloaded the release)
+
+This plugin is only the wrapper: the auditing engine (`calibguard/` code + **475 MB of model weights**)
+and its Python dependencies must be prepared separately. The release ships an installer — one command:
+
+```powershell
+node setup.mjs
+```
+
+It is idempotent and will:
+
+1. download the official CG release `CalibGuard-GUI.zip` (~467 MB) and extract it to `CG_GUI/` **next to
+   this package**;
+2. create `.venv` there (requires **64-bit Python 3.10–3.12**; the script detects and explains);
+3. install dependencies from `requirements-gui.txt` (torch / transformers / scikit-learn / openai …, 1–3 GB);
+4. run a bridge self-check and print the device tier, model and threshold status.
+
+```powershell
+node setup.mjs --help                          # all options
+node setup.mjs --from D:\CalibGuard-GUI.zip    # use a manually downloaded release zip (offline)
+node setup.mjs --dest D:\CG_GUI                # custom location (then configure engineRoot)
+```
+
+> Disk estimate: **467 MB download + 480 MB extracted + 1–3 GB dependencies**. CPU-only torch is enough
+> (low-end GPUs are tiered down to CPU anyway). Skip this step if you already have a working `CG_GUI/`.
+
 ### Prerequisites
 
 1. **DSH** (DeepSeek Harness) — verified on 0.1.5-rc.2;
-2. **The CG engine** — clone [P-436/CG](https://github.com/P-436/CG) and prepare `.venv` plus model
-   weights under `CG_GUI/` (running `CG_GUI/launcher.py` once installs the environment; model weights in
-   `CG_GUI/models/` are not committed — see the CG README).
+2. **The CG engine** — prepared by `node setup.mjs` above, or an existing `CG_GUI/` (with `calibguard/`,
+   `models/` and `.venv`; you can also clone [P-436/CG](https://github.com/P-436/CG) and set it up yourself).
 
 ### Option A — source mode (a `file://` loader row, no install)
 

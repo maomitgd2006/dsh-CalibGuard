@@ -45,11 +45,37 @@
 
 ## 安装
 
+### 0) 一键准备引擎（从 Release 下载的用户必做）
+
+本插件只是"壳"：审计引擎（`calibguard/` 代码 + **475 MB 模型权重**）和 Python 依赖要单独准备。
+发行包里带了安装器，**一条命令**搞定：
+
+```powershell
+node setup.mjs
+```
+
+它会（可重复执行，已完成的步骤自动跳过）：
+
+1. 下载 CG 官方发行包 `CalibGuard-GUI.zip`（约 467 MB）并解压到**本包同级的 `CG_GUI/`**；
+2. 在该目录创建 `.venv`（需要 **64 位 Python 3.10–3.12**，脚本会自动检测并说明原因）；
+3. 按 `requirements-gui.txt` 安装依赖（torch / transformers / scikit-learn / openai …，约 1–3 GB）；
+4. 跑一次桥接自检，打印设备定档、模型、阈值结果。
+
+```powershell
+node setup.mjs --help                          # 全部参数
+node setup.mjs --from D:\CalibGuard-GUI.zip    # 已手动下载过发行包，不联网
+node setup.mjs --dest D:\CG_GUI                # 装到自定义位置（之后配置 engineRoot）
+```
+
+> 磁盘预估：约 **467 MB 下载 + 480 MB 解压 + 1–3 GB 依赖**；只装 CPU 版 torch 即可
+> （低算力显卡本来也会被定档到 CPU）。
+> 已有引擎（例如 `CG_GUI/` 就在旁边）可跳过这一步。
+
 ### 前提
 
 1. **DSH**（DeepSeek Harness）0.1.5-rc.2 实测可用；
-2. **CG 引擎**：clone [P-436/CG](https://github.com/P-436/CG)，并准备好 `CG_GUI/` 下的 `.venv` 与模型权重
-   （首次运行 `CG_GUI/launcher.py` 会自动装环境；模型目录 `CG_GUI/models/` 不入库，见 CG 的 README）。
+2. **CG 引擎**：已经用上面的 `node setup.mjs` 准备好，或已有可用的 `CG_GUI/`
+   （含 `calibguard/`、`models/`、`.venv`；也可以 clone [P-436/CG](https://github.com/P-436/CG) 自行准备）。
 
 ### 方式 A：源码方式（`file://` 行，无需安装）
 
