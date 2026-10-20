@@ -1,6 +1,6 @@
 # dsh-calibguard —— CalibGuard × DeepSeek Harness 插件
 
-把 [CalibGuard](https://github.com/maomitgd2006/CG) 的文件安全审计引擎接进 DSH，提供**两种使用形态**：
+把 [CalibGuard](https://github.com/P-436/CG) 的文件安全审计引擎接进 DSH，提供**两种使用形态**：
 
 > 本仓库只是 **DSH 插件**（宿主 + 客户端双半边）；审计引擎本体在 CG 仓库的 `CG_GUI/` 里，
 > 本仓库不复制、不修改它，通过常驻 Python 子进程调用。
@@ -18,7 +18,7 @@
 | 仓库 | 内容 |
 |---|---|
 | [maomitgd2006/DSH_CG](https://github.com/maomitgd2006/DSH_CG) | **本仓库**：DSH 插件 —— 宿主侧工具/服务/路由 + 浏览器面板 + Python 桥接 |
-| [maomitgd2006/CG](https://github.com/maomitgd2006/CG) | 引擎与基准：`CG_GUI/`（桌面壳 + `calibguard/` 引擎 + 模型）、`CG_Bench/`（训练/评测）、模型与数据说明 |
+| [P-436/CG](https://github.com/P-436/CG) | 引擎与基准：`CG_GUI/`（桌面壳 + `calibguard/` 引擎 + 模型）、`CG_Bench/`（训练/评测）、模型与数据说明 |
 
 > 本插件的运行前提：本机有 CG 仓库的 `CG_GUI/`（含 `.venv` 与模型权重，不入库）。
 > 插件配置项 `engineRoot` 默认取**本包同级目录**的 `CG_GUI`，也可显式指定任意路径。
