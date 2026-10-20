@@ -92,7 +92,7 @@ DSH desktop → Settings → **Add plugin**, paste any one of the following (res
 | Paste | Example | Notes |
 |---|---|---|
 | **GitHub repository URL** (recommended) | `https://github.com/maomitgd2006/DSH_CG` | Fetches the source and registers the bundle in the current profile |
-| **Local directory path** | `J:\CG\DSH_CG` | For a local clone / extracted copy |
+| **Local directory path** | `<path to this package>` (e.g. `/opt/dsh-calibguard`) | For a local clone / extracted copy |
 | Package name | `dsh-calibguard` | ✅ **Published on npm** (latest v0.2.1); just enter the package name |
 
 > Equivalent CLI (verified: after install DSH automatically appends the package to the profile's
@@ -100,7 +100,7 @@ DSH desktop → Settings → **Add plugin**, paste any one of the following (res
 >
 > ```powershell
 > dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG
-> dsh plugin --profile <profile> add file:J:\CG\DSH_CG
+> dsh plugin --profile <profile> add file:<absolute path to this package>
 > ```
 >
 > Published on npm: <https://www.npmjs.com/package/dsh-calibguard> (`npm i dsh-calibguard` also works).

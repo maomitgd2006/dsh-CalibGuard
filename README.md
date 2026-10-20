@@ -10,7 +10,7 @@
 把 [CalibGuard](https://github.com/P-436/CG) 的文件安全审计引擎接进 **DeepSeek Harness（DSH）**：
 让 AI 在执行 / 安装来路不明的代码之前先过一道**本地**门控，你也可以在侧边栏面板里直接拖文件审计。
 
-- 🔒 **默认离线**：本地 CodeBERT + Platt 校准给出可解释的「恶意概率」，文件内容不出本机；
+- 🔒 **默认离线**：本地 CodeBERT + Platt 校准给出可解释的「恶意概率」，文件内容不会上传；
 - ☁️ **灰区才上云**：只有本地拿不准的文件才发一次云端复核（可关闭）；
 - 🧭 **四档结论**：放行 / 可疑 / 拦截 / 转人工，附证据与 Markdown 报告；
 - 🧰 **两种用法**：AI 工具调用（`calibguard_audit` / `calibguard_status`）+ 浏览器面板；
@@ -84,14 +84,14 @@ DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一�
 | 填什么 | 示例 | 说明 |
 |---|---|---|
 | **GitHub 仓库地址**（推荐） | `https://github.com/maomitgd2006/DSH_CG` | 自动拉取源码并登记到当前 profile 的 bundle |
-| **本地目录路径** | `J:\CG\DSH_CG` | 已 clone / 解压到本机时用 |
+| **本地目录路径** | `<你的插件目录>`（例：`D:\code\dsh-calibguard`） | 已 clone / 解压到本地时用 |
 | 包名 | `dsh-calibguard` | ✅ **已发布到 npm**（最新 v0.2.1）；直接输包名即可 |
 
 > 等价命令行（已实测：安装后 DSH 会自动把包加进 profile 的 `dsh.profile.bundles`）：
 >
 > ```powershell
 > dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG
-> dsh plugin --profile <profile> add file:J:\CG\DSH_CG
+> dsh plugin --profile <profile> add file:<本包绝对路径>
 > ```
 >
 > 包名已发布：<https://www.npmjs.com/package/dsh-calibguard>（`npm i dsh-calibguard` 亦可）。
