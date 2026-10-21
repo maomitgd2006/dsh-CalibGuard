@@ -4,7 +4,7 @@
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-103%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-105%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 把 [CalibGuard](https://github.com/P-436/CG) 的文件安全审计引擎接进 **DeepSeek Harness（DSH）**：
@@ -217,8 +217,9 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 - **AI 调用同样使用这份设置**（优先级：插件配置 < 共享设置 < 本次调用参数）；
 - 改完立即生效，**不用重启**；
 - API Key 写入 DSH 凭据库（`ctx.credentials`），不落入该设置文件；
-- **凭据名**只是"保存位置"的名字（不是密钥本身）：面板里填（如 `DEEPSEEK_API_KEY`）+ API Key，
-  保存后名字记进共享设置的 `credentialRef`，值写进 DSH 凭据库；留空则用插件配置里的 `credentialRef`；
+- **凭据名**只是"保存位置"的名字（不是密钥本身，面板默认预填 `DEEPSEEK_API_KEY`）：填 API Key 保存后，
+  名字记进共享设置的 `credentialRef`，值优先写入 DSH 凭据库；**当前 DSH 版本不支持从插件写凭据库时，
+  自动保存到本机 `~/.dsh/calibguard-credentials.json`（0600，仅本机）**，面板会明确提示存储位置；
 - **审计结果**：每次审计在引擎的 `reports/` 目录生成 JSON + Markdown（默认 `<engineRoot>/reports`，
   `engineRoot` 默认 `~/.dsh/calibguard-engine`）。面板结果区会显示该路径并可「清空结果」，
   条目里的「查看 Markdown 报告」可直接打开。
@@ -262,7 +263,8 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | 侧边栏没有图标 / 面板报 `not found` | 客户端与路由在宿主启动时加载：**重启 DSH** |
 | **首次运行要等十几分钟** | 正常：首次下载模型（约 442 MB，自动镜像回退）并安装依赖（1–3 GB）；面板顶部有进度卡片，只需一次 |
 | 首次审计很慢 | 正常：要加载约 475 MB 权重（之后走常驻进程） |
-| **面板保存 API Key 提示"需要 credentialRef"** | 升级到 ≥ **0.3.3**：面板「凭据名」可直接填写并记住（不用改插件配置）；旧版本请把 `credentialRef` 写进插件配置 |
+| **面板保存 API Key 提示"需要 credentialRef"** | 升级到 ≥ **0.3.3**：面板「凭据名」可直接填写并记住（默认预填 `DEEPSEEK_API_KEY`）；旧版本请把 `credentialRef` 写进插件配置 |
+| **提示"当前环境不支持写入 DSH 凭据库"** | ≥0.3.6 起会自动回退到本机凭据文件 `~/.dsh/calibguard-credentials.json`（0600），面板会显示存储位置；想改回凭据库时在 DSH Models 页配置即可。也可用插件配置 `llmApiKey`（不推荐） |
 | **审计结果保存在哪 / 想清空** | 保存在引擎 `reports/` 目录（默认 `<engineRoot>/reports`），每次审计生成 JSON + Markdown；面板结果区显示路径并带「清空结果」按钮；AI 工具返回 `report_md_path` / `report_json_path` |
 | **审计时总提示"首次会加载模型"** | 0.3.3 起只在模型尚未加载时提示；加载后按钮只显示「审计中…」，顶部状态显示「模型 已加载」 |
 | **有 NVIDIA 显卡（如 RTX 2060）但一直显示 CPU** | 说明装的是 CPU 版 torch（旧版安装器行为）。升级到 ≥0.3.3 后面板会给出提示；在插件目录运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）装上 CUDA 版即可，之后重启 DSH |
@@ -286,7 +288,7 @@ dsh-CalibGuard/
 ├── engine/              从 CG_GUI 复制来的引擎核心（代码/词表/校准参数，不含 475 MB 权重）
 ├── cordis.patch.yml     组合包 patch（把插件行插进 profile 配置树）
 ├── scripts/             link-dsh（开发期挂包）、bridge-selftest（引擎自检）
-├── test/                node --test（103 个用例；缺引擎环境时自动 skip）
+├── test/                node --test（105 个用例；缺引擎环境时自动 skip）
 ├── .github/workflows/   publish.yml：npm 可信发布（OIDC，可选）
 └── docs/                配置全表、性能、排错、插件契约、实现决策
 ```

@@ -9,7 +9,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -97,4 +97,59 @@ test('共享设置校验 credentialRef 形状', () => {
   assert.throws(() => validateSettings({ credentialRef: 'bad name' }), /credentialRef/)
   assert.throws(() => validateSettings({ credentialRef: '1ABC' }), /credentialRef/)
   assert.throws(() => validateSettings({ credentialRef: 42 }), /credentialRef/)
+})
+
+test('DSH 凭据库不可写时回退到本地凭据文件（仅本机）', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cg-cred-local-'))
+  const prevHome = process.env.DSH_HOME
+  process.env.DSH_HOME = dir
+  try {
+    const store = new SettingsStore({ file: join(dir, 'settings.json') })
+    // 模拟旧版 DSH：ctx.credentials 只有 resolve，没有 set
+    const engine = new CalibGuardEngine({
+      config: normalizeConfig(undefined),
+      settingsStore: store,
+      credentials: { resolve: async () => null },
+    })
+    const result = await engine.setCredential('sk-local-file', 'LOCAL_KEY')
+    assert.equal(result.storage, 'local-file')
+    assert.equal(store.get().credentialRef, 'LOCAL_KEY')
+
+    const saved = JSON.parse(readFileSync(join(dir, 'calibguard-credentials.json'), 'utf8'))
+    assert.equal(saved.LOCAL_KEY, 'sk-local-file')
+
+    const resolved = await engine.resolveCredential()
+    assert.equal(resolved.key, 'sk-local-file')
+    assert.equal(resolved.source, 'local-file')
+    assert.equal(engine.diagnostics().credentialStorage, 'local-file')
+  } finally {
+    if (prevHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = prevHome
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('写入 DSH 凭据库抛错时也回退本地文件', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'cg-cred-fail-'))
+  const prevHome = process.env.DSH_HOME
+  process.env.DSH_HOME = dir
+  try {
+    const store = new SettingsStore({ file: join(dir, 'settings.json') })
+    const engine = new CalibGuardEngine({
+      config: normalizeConfig(undefined),
+      settingsStore: store,
+      credentials: {
+        resolve: async () => null,
+        set: async () => { throw new Error('not supported') },
+      },
+    })
+    const result = await engine.setCredential('sk-fallback', 'FALLBACK_KEY')
+    assert.equal(result.storage, 'local-file')
+    const resolved = await engine.resolveCredential()
+    assert.equal(resolved.key, 'sk-fallback')
+  } finally {
+    if (prevHome === undefined) delete process.env.DSH_HOME
+    else process.env.DSH_HOME = prevHome
+    rmSync(dir, { recursive: true, force: true })
+  }
 })

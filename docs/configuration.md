@@ -46,11 +46,14 @@
 
 ## 三、云端复核的 Key 从哪来（不硬编码、不隐式继承）
 
-1. `credentialRef`（推荐；插件配置或面板「凭据名」两者取其一）→ `ctx.credentials.resolve(ref)`，优先级
-   **继承环境 > `~/.dsh/.credentials.yaml` > `<cwd>/.env` > `$DSH_HOME/.env`**；
+1. `credentialRef`（推荐；插件配置或面板「凭据名」两者取其一，面板默认 `DEEPSEEK_API_KEY`）→
+   `ctx.credentials.resolve(ref)`，优先级 **继承环境 > `~/.dsh/.credentials.yaml` > `<cwd>/.env` > `$DSH_HOME/.env`**；
    解析到的值随请求走 **stdin** 下发，**不进 argv、不进子进程环境变量**，且每次操作重新解析（换 Key 下一次审计即生效）。
 2. `llmApiKey`（字面值，次选）。
-3. `CG_GUI/gui-settings.json` 里的 `deepseek_api_key`（`useGuiSettings: true` 时生效）。
+3. 同名环境变量（名字来自 `credentialRef`）；
+4. 本地凭据回退文件 `$DSH_HOME/calibguard-credentials.json`（面板保存时若 DSH 版本不支持写凭据库，
+   会自动写到这里；仅本机、权限 0600，值不落共享设置文件）；
+5. `CG_GUI/gui-settings.json` 里的 `deepseek_api_key`（`useGuiSettings: true` 时生效）。
 
 三者都没有 → 云端复核不可用、灰区转人工（安全降级）。桥接子进程**不会**去读宿主的
 `DEEPSEEK_API_KEY`：它的环境已按 DSH 的 `scrubbedParentEnv` 清洗（`*KEY*` / `*PASSWORD*` /

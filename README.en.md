@@ -4,7 +4,7 @@ English | [中文](README.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-103%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-105%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 Plugs the [CalibGuard](https://github.com/P-436/CG) file-security auditing engine into
@@ -228,10 +228,11 @@ After pressing Save:
 - **the AI uses the same values** (precedence: plugin config < shared settings < per-call options);
 - changes take effect immediately, no restart;
 - the API key goes into the DSH credential store (`ctx.credentials`), not into that settings file;
-- the **credential name** is only the name of the storage slot (not the secret): fill it in the panel
-  (e.g. `DEEPSEEK_API_KEY`) together with the API key; the name is remembered in shared settings
-  (`credentialRef`) and the value is written to the DSH credential store. Leave it empty to use the
-  plugin config `credentialRef`;
+- the **credential name** is only the name of the storage slot (not the secret; pre-filled as
+  `DEEPSEEK_API_KEY`): fill in the API key and save; the name is remembered in shared settings
+  (`credentialRef`) and the value goes to the DSH credential store first. **If the current DSH version
+  cannot be written from a plugin, the key is stored in the local `~/.dsh/calibguard-credentials.json`
+  (0600, this machine only)** and the panel tells you where it landed;
 - **audit results**: every audit writes JSON + Markdown into the engine's `reports/` directory
   (default `<engineRoot>/reports`, `engineRoot` defaults to `~/.dsh/calibguard-engine`). The panel shows
   that path, has a "clear results" button, and each item links to its Markdown report.
@@ -277,7 +278,8 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | First audit is slow | Normal: ~475 MB of weights are loaded once (then the process stays resident) |
 | Big file takes tens of seconds | Normal: full-text sliding-window inference; see [docs/performance.md](docs/performance.md) |
 | Gray zone always goes to manual review | No credential configured: save "credential name + API key" in the panel, or set `credentialRef`, or configure it in DSH Models |
-| **Panel says "credentialRef required" when saving the API key** | Upgrade to ≥ **0.3.3**: the panel has a "credential name" field and remembers it (no plugin config edit needed); older versions require `credentialRef` in the plugin config |
+| **Panel says "credentialRef required" when saving the API key** | Upgrade to ≥ **0.3.3**: the panel has a "credential name" field (defaults to `DEEPSEEK_API_KEY`) and remembers it; older versions require `credentialRef` in the plugin config |
+| **"This environment does not support writing the DSH credential store"** | Since 0.3.6 the key automatically falls back to the local `~/.dsh/calibguard-credentials.json` (0600) and the panel shows the storage location; you can also configure it in the DSH Models page, or use plugin config `llmApiKey` (not recommended) |
 | **Where are audit results saved / how to clear them** | In the engine's `reports/` directory (default `<engineRoot>/reports`): JSON + Markdown per audit. The panel shows the path and has a "clear results" button; AI tools return `report_md_path` / `report_json_path` |
 | **"First audit will load the model" hint shows every time** | Since 0.3.3 it is only shown while the model is not loaded yet; afterwards the button just says "auditing…" and the header shows "model loaded" |
 | **NVIDIA GPU (e.g. RTX 2060) but the engine keeps using CPU** | The installed torch is the CPU build (old installer behavior). Upgrade to ≥0.3.3 (the panel will tell you) and run `node setup.mjs --reinstall-torch` (~2.5 GB) in the plugin directory, then restart DSH |
@@ -299,7 +301,7 @@ dsh-CalibGuard/
 ├── engine/              Bundled engine core copied from CG_GUI (code / tokenizer / calibration, no weights)
 ├── cordis.patch.yml     Bundle patch (inserts the loader row)
 ├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
-├── test/                node --test (103 cases; auto-skip when the engine env is missing)
+├── test/                node --test (105 cases; auto-skip when the engine env is missing)
 ├── .github/workflows/   publish.yml: npm trusted publishing (OIDC, optional)
 └── docs/                configuration, performance, troubleshooting, plugin contract, design notes
 ```

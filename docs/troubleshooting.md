@@ -9,6 +9,7 @@
 | 每份文件都 `manual_review` + `CUDA error: no kernel image` | 设备定档失效：确认 `device` 未被强制成 `cuda` |
 | 灰区全部转人工、`llm.status=api_error` | 没配凭据（预期降级）→ 设 `credentialRef`（推荐）或在 DSH Models 页配置 |
 | `凭据引用 X 未配置` 告警 | `credentialRef` 指向的引用在 DSH 凭据库里没有值；在 Models 页填 Key 或用 `llmApiKey` |
+| **提示"当前环境不支持写入 DSH 凭据库"** | ≥0.3.6 会自动回退到 `~/.dsh/calibguard-credentials.json`（0600，仅本机），面板会显示存储位置；清空即删该文件或到 DSH Models 页重新配置 |
 | **面板保存 API Key 报「需要 credentialRef」** | 升级到 ≥0.3.3：面板「凭据名」直接填（如 `DEEPSEEK_API_KEY`）并保存，会记进共享设置；旧版本只能把 `credentialRef` 写进插件配置 |
 | **审计结果在哪里 / 怎么清空** | 引擎 `reports/` 目录（默认 `<engineRoot>/reports`）：每次审计生成 JSON + Markdown；面板结果区显示路径并有「清空结果」，工具返回 `report_md_path` / `report_json_path` |
 | **每次审计都提示"首次会加载模型"** | 0.3.3 起仅在模型未加载时提示；加载后不再出现，顶部状态显示「模型 已加载」 |
