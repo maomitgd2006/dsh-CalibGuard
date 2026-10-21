@@ -372,7 +372,13 @@ def _op_status(options: dict | None = None) -> dict:
 
     pipeline = _STATE["pipeline"]
     cfg = pipeline.cfg if pipeline is not None else _build_cfg(options)
-    policy = _STATE["device_policy"] or {}
+    policy = dict(_STATE["device_policy"] or {})
+    # 定档说 CUDA、但实际 torch 没启用 CUDA（典型：装的是 CPU 版 torch）→ 如实标注
+    if policy.get("mode") == "cuda" and not cuda_available:
+        policy["mode"] = "cpu"
+        policy["reason"] = (policy.get("reason") or "") + \
+            "；但当前 torch 未启用 CUDA（可能是 CPU 版 torch），实际用 CPU"
+        policy["env"] = "CUDA_VISIBLE_DEVICES 未设置（由 torch 决定）"
     return {
         "engineRoot": root,
         "engineVersion": _engine_version(),

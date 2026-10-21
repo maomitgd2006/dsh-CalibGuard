@@ -62,6 +62,14 @@
 > 默认**不再**从 GitHub 下载 CG 发行包；只有显式 `node setup.mjs --from <zip>` 或 `--url <地址>`
 > 才会走 CG 发行包，用于离线/指定引擎版本。
 
+**安装速度**：模型/引擎包默认 **4 路并发分段下载**（实测单连接 0.6 MB/s → 并发 2.3 MB/s），
+GitHub 直连失败会自动换 gh-proxy / ghfast / ghproxy 镜像；pip 依赖按 清华 → 阿里 → 中科大 → 腾讯 → 官方
+依次回退。可用 `DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS` 调整并发数。
+
+**GPU 自动定档**：检测到 NVIDIA 且 **CUDA ≥ 12.8、算力 ≥ 7.5**（RTX 20/30/40 系）时自动安装
+**CUDA（cu128）版 torch**；否则装 CPU 版（GTX 10 系算力 6.1，cu128 轮子里没有对应 kernel，只能 CPU）。
+面板顶部会显示「推理设备：cpu/cuda」和定档原因。
+
 **进度在哪看**：面板顶部会出现「首次运行：正在自动准备引擎与依赖」卡片（含当前步骤与输出尾巴）；
 宿主日志里是 `[calibguard]` 开头的行。准备期间审计按钮不可用，完成后点「刷新状态」即可。
 首次约需 **10–20 分钟**（取决于网速和 pip 源），只需一次。
@@ -85,13 +93,17 @@
 
 ### 方式 0：桌面端「添加插件」（最省事，推荐）
 
-DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一种即可（装完按提示重启 DSH）：
+**DSH 桌面版只需要一步：设置 → 添加插件 → 输入 `dsh-calibguard` → 重启 DSH。**
+默认装 npm 上的最新版；要固定版本就写 `dsh-calibguard@0.3.3`（`@` 后面是版本号）。
+不需要命令行、不需要下载源码。
+
+输入框里也可以填以下任意一种（装完按提示重启 DSH）：
 
 | 填什么 | 示例 | 说明 |
 |---|---|---|
 | **GitHub 仓库地址**（推荐） | `https://github.com/maomitgd2006/dsh-CalibGuard` | 自动拉取源码并登记到当前 profile 的 bundle |
 | **本地目录路径** | `<你的插件目录>`（例：`D:\code\dsh-calibguard`） | 已 clone / 解压到本地时用 |
-| **包名** | `dsh-calibguard` | ✅ **已发布到 npm**，直接输包名即可（自动装 npm 上的 latest） |
+| **包名** | `dsh-calibguard` 或 `dsh-calibguard@0.3.3` | ✅ **已发布到 npm**；不写版本=装 latest，写 `@版本`=固定版本 |
 
 > 等价命令行（已实测：安装后 DSH 会自动把包加进 profile 的 `dsh.profile.bundles`）：
 >
@@ -191,7 +203,12 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 - 参数写入 `$DSH_HOME/calibguard-settings.json`（默认 `~/.dsh`，不写进仓库）；
 - **AI 调用同样使用这份设置**（优先级：插件配置 < 共享设置 < 本次调用参数）；
 - 改完立即生效，**不用重启**；
-- API Key 写入 DSH 凭据库（`ctx.credentials`），不落入该设置文件。
+- API Key 写入 DSH 凭据库（`ctx.credentials`），不落入该设置文件；
+- **凭据名**只是"保存位置"的名字（不是密钥本身）：面板里填（如 `DEEPSEEK_API_KEY`）+ API Key，
+  保存后名字记进共享设置的 `credentialRef`，值写进 DSH 凭据库；留空则用插件配置里的 `credentialRef`；
+- **审计结果**：每次审计在引擎的 `reports/` 目录生成 JSON + Markdown（默认 `<engineRoot>/reports`，
+  `engineRoot` 默认 `~/.dsh/calibguard-engine`）。面板结果区会显示该路径并可「清空结果」，
+  条目里的「查看 Markdown 报告」可直接打开。
 
 ### 4) 工具参数（按次覆盖，写给进阶用户）
 
@@ -218,7 +235,7 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | `enabled` | `true` | 关掉则什么都不注册（临时停用不必删行） |
 | `engineRoot` | `''` | 引擎目录；留空自动推导：**npm/桌面端安装**时为 `~/.dsh/calibguard-engine`，源码仓库里为本包同级 `CG_GUI` |
 | `device` | `auto` | 自动做「CUDA 版本 + 算力」双检，低算力显卡回落 CPU |
-| `credentialRef` | `''` | 推荐的云端复核凭据引用名，如 `DEEPSEEK_API_KEY`（交给 DSH 凭据库解析） |
+| `credentialRef` | `''` | 云端复核凭据**名**（保存位置，不是密钥），如 `DEEPSEEK_API_KEY`；留空=用面板「凭据名」保存的名字；值存放在 DSH 凭据库/环境变量 |
 | `announceToModel` | `true` | 是否把「何时该用 CalibGuard」写进系统提示词 |
 | `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**准备引擎（内置代码 + npm 模型分片）、按需下载便携 Python、安装依赖；设 `false` 则只报错提示手动 `node setup.mjs` |
 | `maxFiles` | `20` | 目录展开上限；显式给出/上传的文件不受限 |
@@ -232,8 +249,12 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | 侧边栏没有图标 / 面板报 `not found` | 客户端与路由在宿主启动时加载：**重启 DSH** |
 | **首次运行要等十几分钟** | 正常：首次下载模型（约 442 MB，自动镜像回退）并安装依赖（1–3 GB）；面板顶部有进度卡片，只需一次 |
 | 首次审计很慢 | 正常：要加载约 475 MB 权重（之后走常驻进程） |
+| **面板保存 API Key 提示"需要 credentialRef"** | 升级到 ≥ **0.3.3**：面板「凭据名」可直接填写并记住（不用改插件配置）；旧版本请把 `credentialRef` 写进插件配置 |
+| **审计结果保存在哪 / 想清空** | 保存在引擎 `reports/` 目录（默认 `<engineRoot>/reports`），每次审计生成 JSON + Markdown；面板结果区显示路径并带「清空结果」按钮；AI 工具返回 `report_md_path` / `report_json_path` |
+| **审计时总提示"首次会加载模型"** | 0.3.3 起只在模型尚未加载时提示；加载后按钮只显示「审计中…」，顶部状态显示「模型 已加载」 |
+| **有 NVIDIA 显卡（如 RTX 2060）但一直显示 CPU** | 说明装的是 CPU 版 torch（旧版安装器行为）。升级到 ≥0.3.3 后面板会给出提示；在插件目录运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）装上 CUDA 版即可，之后重启 DSH |
 | 大文件审计几十秒 | 正常：全文滑窗逐窗推理，见 [docs/performance.md](docs/performance.md) |
-| 灰区全部转人工 | 没配凭据：设 `credentialRef`（推荐）或在 DSH Models 页配置 |
+| 灰区全部转人工 | 没配凭据：在面板「凭据名 + API Key」保存，或设 `credentialRef`、或在 DSH Models 页配置 |
 | 正规第三方库被判 BLOCK | 压缩库充满 eval/base64 等特征，模型语料偏 Python 生态 → 属已知误报倾向，见 [docs/troubleshooting.md](docs/troubleshooting.md) |
 | 面板报 401/403 | 浏览器会话未通过宿主鉴权：刷新页面/重新登录 |
 | 改了参数 AI 没变 | 面板里需点「保存」（只改表单不保存 = 仅影响那一次） |

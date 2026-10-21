@@ -68,6 +68,15 @@ are missing. **You don't install them by hand.** After you install the plugin an
 > The CG release zip is **no longer downloaded from GitHub by default**; only an explicit
 > `node setup.mjs --from <zip>` or `--url <url>` uses it (offline installs / pinning an engine version).
 
+**Install speed**: the model/engine archive is downloaded with **4 parallel ranged connections** (measured
+0.6 MB/s single → 2.3 MB/s parallel); GitHub direct failures fall back to the gh-proxy / ghfast / ghproxy
+mirrors, and pip tries Tsinghua → Aliyun → USTC → Tencent → PyPI in order. Tune with
+`DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS`.
+
+**GPU auto-tiering**: with an NVIDIA GPU that has **CUDA ≥ 12.8 and compute capability ≥ 7.5** (RTX 20/30/40)
+the installer pulls the **CUDA (cu128) build of torch**; otherwise it installs the CPU build (GTX 10 series is
+SM 6.1 and has no kernels in the cu128 wheels). The panel header shows the inference device and the reason.
+
 **Where to watch progress**: the panel shows a "First run: preparing engine and dependencies" card with
 the current step and the tail of the installer output; host logs show `[calibguard]` lines. The audit
 button stays disabled until it is ready — press "刷新状态 / Refresh" afterwards. Expect **10–20 minutes**
@@ -92,13 +101,17 @@ once (depends on network and pip mirror).
 
 ### Option 0 — desktop "Add plugin" dialog (easiest, recommended)
 
-DSH desktop → Settings → **Add plugin**, paste any one of the following (restart DSH afterwards):
+**On DSH desktop it is one step: Settings → Add plugin → enter `dsh-calibguard` → restart DSH.**
+That installs the latest npm release; to pin a version write `dsh-calibguard@0.3.3` (`@` + version).
+No terminal and no source download needed.
+
+The dialog also accepts any of the following (restart DSH afterwards):
 
 | Paste | Example | Notes |
 |---|---|---|
 | **GitHub repository URL** (recommended) | `https://github.com/maomitgd2006/dsh-CalibGuard` | Fetches the source and registers the bundle in the current profile |
 | **Local directory path** | `<path to this package>` (e.g. `/opt/dsh-calibguard`) | For a local clone / extracted copy |
-| **Package name** | `dsh-calibguard` | ✅ **Published on npm**; just enter the package name (installs npm `latest`) |
+| **Package name** | `dsh-calibguard` or `dsh-calibguard@0.3.3` | ✅ **Published on npm**; without a version it installs `latest`, with `@version` it pins that version |
 
 > Equivalent CLI (verified: after install DSH automatically appends the package to the profile's
 > `dsh.profile.bundles`):
@@ -201,7 +214,14 @@ After pressing Save:
 - values are written to `$DSH_HOME/calibguard-settings.json` (defaults to `~/.dsh`, never committed);
 - **the AI uses the same values** (precedence: plugin config < shared settings < per-call options);
 - changes take effect immediately, no restart;
-- the API key goes into the DSH credential store (`ctx.credentials`), not into that settings file.
+- the API key goes into the DSH credential store (`ctx.credentials`), not into that settings file;
+- the **credential name** is only the name of the storage slot (not the secret): fill it in the panel
+  (e.g. `DEEPSEEK_API_KEY`) together with the API key; the name is remembered in shared settings
+  (`credentialRef`) and the value is written to the DSH credential store. Leave it empty to use the
+  plugin config `credentialRef`;
+- **audit results**: every audit writes JSON + Markdown into the engine's `reports/` directory
+  (default `<engineRoot>/reports`, `engineRoot` defaults to `~/.dsh/calibguard-engine`). The panel shows
+  that path, has a "clear results" button, and each item links to its Markdown report.
 
 ### 4) Tool parameters (per-call, advanced)
 
@@ -228,7 +248,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | `enabled` | `true` | When false nothing is registered (no need to remove the row) |
 | `engineRoot` | `''` | CG_GUI directory; empty = the `CG_GUI` next to this package |
 | `device` | `auto` | Checks both CUDA build and compute capability; low-end GPUs fall back to CPU |
-| `credentialRef` | `''` | Recommended credential reference name, e.g. `DEEPSEEK_API_KEY` (resolved via the DSH credential store) |
+| `credentialRef` | `''` | Credential **name** (storage slot, not the secret), e.g. `DEEPSEEK_API_KEY`; empty = use the name saved from the panel; the value lives in the DSH credential store / env |
 | `announceToModel` | `true` | Add "when to use CalibGuard" to the system prompt |
 | `autoSetup` | `true` | On first run, automatically download the engine, a portable Python when needed, and install deps; set `false` to only fail with instructions |
 | `maxFiles` | `20` | Directory recursion cap; explicitly given/uploaded files are not capped |
@@ -240,10 +260,14 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | Symptom | Fix |
 |---|---|
 | No sidebar icon / panel says `not found` | Client bundle and routes load at host startup: **restart DSH** |
-| **First run takes 10–20 minutes** | Normal: the model (476 MB) is downloaded from npm mirrors and dependencies (1–3 GB) are installed once; the panel shows progress |
+| **First run takes 10–20 minutes** | Normal: the model (~442 MB, from the repository's model release asset with mirror fallback) and dependencies (1–3 GB) are installed once; the panel shows progress |
 | First audit is slow | Normal: ~475 MB of weights are loaded once (then the process stays resident) |
 | Big file takes tens of seconds | Normal: full-text sliding-window inference; see [docs/performance.md](docs/performance.md) |
-| Gray zone always goes to manual review | No credential configured: set `credentialRef` (recommended) or configure it in DSH Models |
+| Gray zone always goes to manual review | No credential configured: save "credential name + API key" in the panel, or set `credentialRef`, or configure it in DSH Models |
+| **Panel says "credentialRef required" when saving the API key** | Upgrade to ≥ **0.3.3**: the panel has a "credential name" field and remembers it (no plugin config edit needed); older versions require `credentialRef` in the plugin config |
+| **Where are audit results saved / how to clear them** | In the engine's `reports/` directory (default `<engineRoot>/reports`): JSON + Markdown per audit. The panel shows the path and has a "clear results" button; AI tools return `report_md_path` / `report_json_path` |
+| **"First audit will load the model" hint shows every time** | Since 0.3.3 it is only shown while the model is not loaded yet; afterwards the button just says "auditing…" and the header shows "model loaded" |
+| **NVIDIA GPU (e.g. RTX 2060) but the engine keeps using CPU** | The installed torch is the CPU build (old installer behavior). Upgrade to ≥0.3.3 (the panel will tell you) and run `node setup.mjs --reinstall-torch` (~2.5 GB) in the plugin directory, then restart DSH |
 | A legitimate third-party library is BLOCKed | Minified libraries are full of eval/base64 patterns and the corpus is Python-heavy — known false-positive tendency, see [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Panel returns 401/403 | Browser session isn't authenticated with the host: refresh / sign in again |
 | The AI ignores changed settings | Press Save in the panel; editing fields without saving applies to that run only |

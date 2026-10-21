@@ -48,8 +48,9 @@
         # allowThreshold: 0.15
         # blockThreshold: 0.85
         # llmEnabled: false
-        # 【推荐】云端复核凭据：交给 DSH 的 ctx.credentials 解析（继承环境 > 凭据库 > .env）。
-        # 名字写在配置里，插件代码不含硬编码凭据名，也不会隐式继承宿主环境变量。
+        # 【推荐】云端复核凭据名（保存位置，不是密钥）：交给 DSH 的 ctx.credentials 解析（继承环境 > 凭据库 > .env）。
+        # 名字可以写在这里，也可以留空、直接在面板「凭据名」里填（保存后记进共享设置）；
+        # 插件代码不含硬编码凭据名，也不会隐式继承宿主环境变量。
         # credentialRef: DEEPSEEK_API_KEY
         # 备选：直接写字面值（不推荐，凭据会出现在配置文件里）
         # llmApiKey: ''

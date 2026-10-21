@@ -22,11 +22,14 @@
 | `llmBaseUrl` / `llmModel` | 跟随引擎 | OpenAI 兼容端点与模型名 |
 | `llmContentSource` | 跟随引擎 | 送审内容源：`evidence`（精炼证据）/ `raw`（预处理后全文） |
 | `llmDeliveryMode` | 跟随引擎 | 投递方式：`truncate` / `window` / `all` |
-| `credentialRef` | `''` | **推荐**：DSH 凭据引用名（如 `DEEPSEEK_API_KEY`），交给 `ctx.credentials.resolve()` |
+| `credentialRef` | `''` | **推荐**：凭据**名**（保存位置，不是密钥，如 `DEEPSEEK_API_KEY`），交给 `ctx.credentials.resolve()`。留空时用面板「凭据名」保存进共享设置的名字 |
 | `llmApiKey` | `''` | 字面值 Key（不推荐，会落在配置文件里）；优先于 `credentialRef` |
 | `sensitiveEnvPattern` | `''` | 桥接子进程环境清洗的兜底正则；留空=用 DSH 的实现或内置启发式 |
 | `settingsPath` | `''` | GUI 与 AI 共用的设置文件；留空=`$DSH_HOME/calibguard-settings.json` |
 | `windowStride` | 跟随引擎（256） | 模型侧全文滑窗步长（1~511）。**不在面板/共享设置里**，只走插件配置或工具参数；设 510 时窗口数约减半 |
+
+> **GPU 定档**：安装器检测到 NVIDIA 且 CUDA ≥ 12.8、算力 ≥ 7.5 时自动装 CUDA（cu128）版 torch，
+> 否则装 CPU 版。已经装成 CPU 版时：在插件目录运行 `node setup.mjs --reinstall-torch`。
 
 ## 二、参数优先级
 
@@ -40,7 +43,7 @@
 
 ## 三、云端复核的 Key 从哪来（不硬编码、不隐式继承）
 
-1. `credentialRef`（推荐）→ `ctx.credentials.resolve(ref)`，优先级
+1. `credentialRef`（推荐；插件配置或面板「凭据名」两者取其一）→ `ctx.credentials.resolve(ref)`，优先级
    **继承环境 > `~/.dsh/.credentials.yaml` > `<cwd>/.env` > `$DSH_HOME/.env`**；
    解析到的值随请求走 **stdin** 下发，**不进 argv、不进子进程环境变量**，且每次操作重新解析（换 Key 下一次审计即生效）。
 2. `llmApiKey`（字面值，次选）。
@@ -55,17 +58,21 @@
 | 项 | 说明 |
 |---|---|
 | 文件 | `$DSH_HOME/calibguard-settings.json`（默认 `~/.dsh`，**不写进仓库**；可用 `settingsPath` 覆盖） |
-| 内容 | 云端复核开关、Base URL、模型名、送审内容、投递方式、截断/滑窗大小与重叠、灰区上下限、目录上限（**不含凭据、不含模型侧步长**） |
+| 内容 | 云端复核开关、Base URL、模型名、送审内容、投递方式、截断/滑窗大小与重叠、灰区上下限、目录上限、**凭据名 `credentialRef`**（**不含密钥本身、不含模型侧步长**） |
 | 写入 | 面板「保存」→ `PUT /api/calibguard/settings`；原子写，非法值不落盘（校验口径与 CG_GUI 一致） |
 | 读取 | 面板加载时回填；AI 每次调用时由引擎合并，**改完立即生效、无需重启** |
 | 重置 | 面板「重置」→ 清空为「跟随插件配置默认值」 |
-| API Key | 面板输入框 → `PUT /api/calibguard/credential` → 写入 DSH 凭据库，不落设置文件 |
+| API Key | 面板「凭据名 + API Key」→ `PUT /api/calibguard/credential` → 值写入 DSH 凭据库（不落设置文件），名字记入共享设置 `credentialRef`（便于下次启动找到） |
 
 ## 五、环境变量
 
 | 变量 | 作用 |
 |---|---|
 | `DSH_CALIBGUARD_PYTHON` | 指定桥接进程使用的 Python 解释器（优先于 `<engineRoot>/.venv`） |
+| `DSH_CALIBGUARD_CPU_ONLY` | 设为 `1` 强制使用 CPU 版 torch（跳过 GPU 定档） |
+| `DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS` | 大文件并发分段下载的连接数（默认 4；模型/引擎包下载提速） |
+| `DSH_CALIBGUARD_TORCH_INDEX` | CUDA 版 torch 的安装索引（默认 `https://download.pytorch.org/whl/cu128`） |
+| `DSH_CALIBGUARD_PIP_INDEX` | 指定 pip 主索引（默认依次尝试 清华 → 阿里 → 中科大 → 腾讯 → 官方） |
 | `DSH_HOME` | DSH 主目录（默认 `~/.dsh`）；决定共享设置文件位置 |
 
 ## 六、宿主 HTTP 路由（浏览器面板使用）

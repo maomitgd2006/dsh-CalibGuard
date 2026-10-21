@@ -28,14 +28,22 @@ import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { homedir } from 'node:os'
 import { Readable } from 'node:stream'
+import { pipeline as streamPipeline } from 'node:stream/promises'
 
 const PKG_ROOT = dirname(fileURLToPath(import.meta.url))
 /** torch 官方轮子目前覆盖的 Python 版本上限（3.13/3.14 装不上 torch）。 */
 const PY_MIN = 10
 const PY_MAX = 12
 
-/** 引擎下载的镜像前缀：GitHub 直连失败时依次重试。 */
-const ENGINE_MIRRORS = ['https://gh-proxy.com/', 'https://ghfast.top/', 'https://ghproxy.cn/']
+/** 引擎/模型下载的镜像前缀：GitHub 直连失败时依次重试（均实测支持 Range 分段）。 */
+const ENGINE_MIRRORS = ['https://gh-proxy.com/', 'https://ghfast.top/', 'https://ghproxy.net/']
+
+/** CUDA 版 torch（与 CG_GUI launcher 相同的定档口径）。 */
+const TORCH_CUDA_INDEX = process.env.DSH_CALIBGUARD_TORCH_INDEX || 'https://download.pytorch.org/whl/cu128'
+const CUDA_MIN = [12, 8]
+const CUDA_MIN_COMPUTE_CAP = [7, 5]
+/** 并发分段下载的段数（0/负数 = 单连接）。 */
+const DOWNLOAD_CONNECTIONS = Number(process.env.DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS || 4)
 /** pip 索引：默认清华镜像，失败回退官方 PyPI。 */
 const DEFAULT_PIP_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
 const OFFICIAL_PIP_INDEX = 'https://pypi.org/simple'
@@ -71,10 +79,79 @@ function mirroredUrls(url) {
   return urls
 }
 
-/** pip 索引候选（自定义 → 清华镜像 → 官方源）。 */
+/** pip 索引候选（自定义 → 清华 → 阿里 → 中科大 → 腾讯 → 官方）。 */
 function pipIndexes() {
   const custom = String(process.env.DSH_CALIBGUARD_PIP_INDEX || process.env.PIP_INDEX_URL || '').trim()
-  return [...new Set([custom, DEFAULT_PIP_INDEX, OFFICIAL_PIP_INDEX].filter(Boolean))]
+  return [...new Set([
+    custom,
+    DEFAULT_PIP_INDEX,
+    'https://mirrors.aliyun.com/pypi/simple/',
+    'https://pypi.mirrors.ustc.edu.cn/simple/',
+    'https://mirrors.cloud.tencent.com/pypi/simple',
+    OFFICIAL_PIP_INDEX,
+  ].filter(Boolean))]
+}
+
+/** 比较版本元组：[a,b] vs [c,d]。 */
+function cmpVersion(a, b) {
+  return (a[0] - b[0]) || ((a[1] ?? 0) - (b[1] ?? 0))
+}
+
+function fmtVersion(version) {
+  return Array.isArray(version) ? version.slice(0, 2).join('.') : '未知'
+}
+
+/** 用 nvidia-smi 探测 GPU：返回 { hasNvidia, gpuName, computeCap, cudaVersion }。 */
+function detectGpu() {
+  const probe = (args) => {
+    const result = spawnSync('nvidia-smi', args, { encoding: 'utf8', timeout: 20_000 })
+    if (result.error || result.status !== 0) return ''
+    return String(result.stdout || '').trim()
+  }
+  const csv = probe(['--query-gpu=name,compute_cap', '--format=csv,noheader'])
+  if (!csv) return { hasNvidia: false, gpuName: null, computeCap: null, cudaVersion: null }
+  const first = csv.split(/\r?\n/)[0] || ''
+  const parts = first.split(',').map((item) => item.trim())
+  const gpuName = parts[0] || null
+  let computeCap = null
+  if (parts[1] && /^\d+\.\d+$/.test(parts[1])) {
+    computeCap = parts[1].split('.').map(Number)
+  }
+  const header = probe([])
+  const match = /CUDA Version:\s*(\d+)\.(\d+)/.exec(header)
+  const cudaVersion = match ? [Number(match[1]), Number(match[2])] : null
+  return { hasNvidia: true, gpuName, computeCap, cudaVersion }
+}
+
+/** 是否需要安装 CUDA 版 torch（与 CG_GUI launcher 同款「CUDA 版本 + 算力」双检）。 */
+function decideCudaTorch(gpu) {
+  if (String(process.env.DSH_CALIBGUARD_CPU_ONLY || '') === '1') {
+    return { useCuda: false, reason: 'DSH_CALIBGUARD_CPU_ONLY=1，强制 CPU' }
+  }
+  if (!gpu.hasNvidia) return { useCuda: false, reason: '未检测到 NVIDIA 显卡（nvidia-smi 不可用）' }
+  if (!gpu.cudaVersion || cmpVersion(gpu.cudaVersion, CUDA_MIN) < 0) {
+    return {
+      useCuda: false,
+      reason: `CUDA 版本 ${fmtVersion(gpu.cudaVersion)} < ${fmtVersion(CUDA_MIN)}（或无法探测）`,
+    }
+  }
+  if (gpu.computeCap && cmpVersion(gpu.computeCap, CUDA_MIN_COMPUTE_CAP) < 0) {
+    return {
+      useCuda: false,
+      reason: `算力 ${fmtVersion(gpu.computeCap)} < ${fmtVersion(CUDA_MIN_COMPUTE_CAP)}（cu128 轮子无对应 kernel）`,
+    }
+  }
+  return { useCuda: true, reason: `算力 ${fmtVersion(gpu.computeCap)} ｜ CUDA ${fmtVersion(gpu.cudaVersion)}` }
+}
+
+/** 已安装 torch 的 CUDA 版本（空串 = CPU 版；null = 未安装/无法导入）。 */
+function installedTorchCuda(python) {
+  const result = spawnSync(python, ['-c', 'import torch;print(torch.version.cuda or "")'], {
+    encoding: 'utf8',
+    timeout: 180_000,
+  })
+  if (result.error || result.status !== 0) return null
+  return String(result.stdout || '').trim()
 }
 
 /** 插件内置引擎目录：CG_GUI 核心文件（代码 / 词表 / 校准参数），不含 476 MB 模型权重。 */
@@ -122,7 +199,7 @@ async function fetchModelWeights(dest) {
     for (const url of mirroredUrls(MODEL_URL)) {
       try {
         log(`下载模型权重（约 442 MB）：${url}`)
-        await download(url, zipPath)
+        await downloadParallel(url, zipPath)
         const size = statSync(zipPath).size
         if (size < MODEL_ZIP_MIN_BYTES) {
           throw new SetupError(`下载内容异常（${bytes(size)}，预期约 442 MB，可能是镜像错误页）`)
@@ -233,6 +310,7 @@ function parseArgs(argv) {
     force: false,
     noPortablePython: false,
     forcePortablePython: false,
+    reinstallTorch: false,
     help: false,
   }
   for (let i = 0; i < argv.length; i += 1) {
@@ -255,6 +333,7 @@ function parseArgs(argv) {
       case '--force': options.force = true; break
       case '--no-portable-python': options.noPortablePython = true; break
       case '--force-portable-python': options.forcePortablePython = true; break
+      case '--reinstall-torch': options.reinstallTorch = true; break
       default: fail(`未知参数：${arg}（用 --help 查看用法）`)
     }
   }
@@ -280,6 +359,7 @@ function printHelp() {
   --force           覆盖已有引擎目录 / 重建 venv
   --no-portable-python  本机没有 Python 时不自动下载便携版（默认会自动下载）
   --force-portable-python  跳过本机 Python 检测，强制用便携版（测试用）
+  --reinstall-torch 重新安装 torch（检测到 NVIDIA 时装 CUDA/cu128 版，约 2.5 GB）
   -h, --help        显示本帮助
 
 示例：
@@ -297,8 +377,10 @@ function printHelp() {
   • pip 默认用清华镜像（pypi.tuna.tsinghua.edu.cn），失败自动回退官方 PyPI；
     可用 DSH_CALIBGUARD_PIP_INDEX 指定其它索引；
   • 从 npm 安装时引擎默认放在 ~/.dsh/calibguard-engine（可用 --dest 或插件配置 engineRoot 指定）；
-  • 默认用 CPU 版 torch（低算力显卡本来也会被定档到 CPU）；
-    要用 GPU 请按 PyTorch 官网自行安装对应 CUDA 轮子。
+  • GPU 自动定档：检测到 NVIDIA 且 CUDA≥12.8、算力≥7.5（如 RTX 20/30/40 系）时
+    自动安装 CUDA（cu128）版 torch；否则用 CPU 版；可用 DSH_CALIBGUARD_CPU_ONLY=1 强制 CPU；
+  • 大文件（模型/引擎包）默认 4 路并发分段下载，可用 DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS 调整；
+  • 装完想换 GPU/CPU 版 torch：node setup.mjs --reinstall-torch。
 `)
 }
 
@@ -408,6 +490,119 @@ async function download(url, file) {
   rmSync(file, { force: true })
   renameSync(temp, file)
   log(`下载完成：${bytes(received)}（用时 ${Math.round((Date.now() - startedAt) / 1000)} 秒）`)
+}
+
+/** 下载一个区间的分片（支持断点续传/重试）。 */
+async function downloadRange(url, file, start, end, { attempts = 3, idleMs = 120_000 } = {}) {
+  const total = end - start + 1
+  let lastError = null
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    const offset = existsSync(file) ? statSync(file).size : 0
+    if (offset >= total) return
+    const controller = new AbortController()
+    let idleTimer = null
+    const resetIdle = () => {
+      if (idleTimer) clearTimeout(idleTimer)
+      idleTimer = setTimeout(() => controller.abort(new Error(`${Math.round(idleMs / 1000)} 秒没有收到数据`)), idleMs)
+    }
+    let response
+    try {
+      resetIdle()
+      response = await fetch(url, {
+        redirect: 'follow',
+        signal: controller.signal,
+        headers: { Range: `bytes=${start + offset}-${end}` },
+      })
+    } catch (error) {
+      if (idleTimer) clearTimeout(idleTimer)
+      lastError = error
+      warn(`分片 ${start}-${end} 第 ${attempt} 次失败：${error.message}`)
+      continue
+    }
+    if (response.status !== 206 && !(response.status === 200 && offset === 0 && start === 0)) {
+      if (idleTimer) clearTimeout(idleTimer)
+      lastError = new SetupError(`分片请求返回 HTTP ${response.status}`)
+      continue
+    }
+    const sink = createWriteStream(file, { flags: offset > 0 ? 'a' : 'w' })
+    const reader = Readable.fromWeb(response.body)
+    try {
+      await new Promise((resolvePromise, rejectPromise) => {
+        reader.on('data', (chunk) => { resetIdle() })
+        reader.on('error', (error) => { clearTimeout(idleTimer); rejectPromise(error) })
+        sink.on('error', (error) => { clearTimeout(idleTimer); rejectPromise(error) })
+        sink.on('finish', () => { clearTimeout(idleTimer); resolvePromise() })
+        reader.pipe(sink)
+      })
+    } catch (error) {
+      lastError = error
+      warn(`分片 ${start}-${end} 第 ${attempt} 次中断：${error.message}（已保留断点）`)
+      continue
+    }
+    if (statSync(file).size >= total) return
+    lastError = new SetupError('分片下载不完整')
+  }
+  throw new SetupError(`分片 ${start}-${end} 下载失败：${lastError?.message ?? '未知错误'}`)
+}
+
+/**
+ * 并发分段下载（大幅提升 GitHub/镜像的单连接限速场景）。
+ * 先探测是否支持 Range；不支持或文件不够大时自动退回单连接 download()。
+ */
+async function downloadParallel(url, file, { connections = DOWNLOAD_CONNECTIONS } = {}) {
+  if (!connections || connections < 2) return download(url, file)
+  let total = 0
+  let supportsRange = false
+  try {
+    const probe = await fetch(url, {
+      redirect: 'follow',
+      headers: { Range: 'bytes=0-0' },
+      signal: AbortSignal.timeout(60_000),
+    })
+    if (probe.ok) {
+      supportsRange = probe.status === 206
+      const contentRange = probe.headers.get('content-range') || ''
+      const sizePart = contentRange.split('/')[1]
+      total = Number(sizePart || probe.headers.get('content-length') || 0)
+      try { await probe.arrayBuffer() } catch { /* 忽略探测体 */ }
+    }
+  } catch {
+    supportsRange = false
+  }
+  if (!supportsRange || !(total > 0) || total < 32 * 1024 ** 2) return download(url, file)
+
+  const chunk = Math.ceil(total / connections)
+  const parts = []
+  for (let index = 0; index < connections; index += 1) {
+    const start = index * chunk
+    const end = Math.min(total - 1, start + chunk - 1)
+    if (start > end) break
+    parts.push({ start, end, file: `${file}.part${index}`, percent: 0 })
+  }
+  log(`分段并发下载：${parts.length} 路，共 ${bytes(total)}（单连接慢时明显提速）`)
+  const startedAt = Date.now()
+  let finished = 0
+  await Promise.all(parts.map(async (part) => {
+    await downloadRange(url, part.file, part.start, part.end)
+    finished += 1
+    log(`  分片 ${finished}/${parts.length} 完成（${bytes(statSync(part.file).size)}）`)
+  }))
+  log(`分段下载完成：${bytes(total)}（用时 ${Math.round((Date.now() - startedAt) / 1000)} 秒），开始合并…`)
+  const temp = `${file}.merging`
+  deleteFile(temp)
+  await streamPipeline((async function* generate() {
+    for (const part of parts) {
+      for await (const chunkData of createReadStream(part.file)) yield chunkData
+    }
+  })(), createWriteStream(temp))
+  for (const part of parts) deleteFile(part.file)
+  if (statSync(temp).size !== total) {
+    deleteFile(temp)
+    throw new SetupError(`合并后大小不符：${bytes(statSync(temp).size)} / ${bytes(total)}`)
+  }
+  deleteFile(file)
+  renameSync(temp, file)
+  log(`✓ 分段下载合并完成：${file}（${bytes(statSync(file).size)}）`)
 }
 
 // ============================== 解压 ==============================
@@ -688,7 +883,7 @@ async function main() {
         let lastError = null
         for (const candidate of candidates) {
           try {
-            await download(candidate, downloadedZip)
+            await downloadParallel(candidate, downloadedZip)
             if (statSync(downloadedZip).size < 100 * 1024 ** 2) {
               throw new SetupError('下载内容明显偏小，可能是镜像错误页')
             }
@@ -804,7 +999,40 @@ async function main() {
       throw lastError ?? new SetupError('pip 安装失败')
     }
     await installWithMirrors(['--upgrade', 'pip', '--quiet'])
-    await installWithMirrors(['-r', requirements])
+
+    // GPU 定档：有可用 NVIDIA（CUDA≥12.8、算力≥7.5）时先装 CUDA 版 torch，
+    // 与 CG_GUI launcher 的口径一致；否则装 CPU 版 torch。
+    const gpu = detectGpu()
+    const decision = decideCudaTorch(gpu)
+    const gpuLabel = gpu.gpuName ? `（${gpu.gpuName}）` : ''
+    log(`GPU 定档：${decision.useCuda ? 'CUDA（cu128）' : 'CPU'} —— ${decision.reason}${gpuLabel}`)
+    const existingTorchCuda = installedTorchCuda(python)
+    if (decision.useCuda && (!existingTorchCuda || options.reinstallTorch)) {
+      step(`安装 CUDA 版 torch（cu128，约 2.5 GB${existingTorchCuda ? '，重装' : ''}）`)
+      if (options.reinstallTorch) {
+        try {
+          await runLive(python, ['-m', 'pip', 'uninstall', '-y', 'torch'])
+        } catch { /* 未安装则忽略 */ }
+      }
+      try {
+        await runLive(python, [
+          '-m', 'pip', 'install', 'torch', '--index-url', TORCH_CUDA_INDEX,
+          '--timeout', '300', '--retries', '3',
+        ])
+      } catch (error) {
+        warn(`CUDA 版 torch 安装失败（${error.message}），回退 CPU 版 torch`)
+      }
+    } else if (existingTorchCuda) {
+      log(`✓ 已安装 CUDA 版 torch（CUDA ${existingTorchCuda}）`)
+    }
+
+    await installWithMirrors(['-r', requirements, '--prefer-binary'])
+    const finalTorchCuda = installedTorchCuda(python)
+    log(`torch CUDA：${finalTorchCuda || '无（CPU 版）'}`)
+    if (decision.useCuda && !finalTorchCuda) {
+      warn('检测到可用 GPU 但 torch 是 CPU 版：审计仍可运行，只是用 CPU。'
+        + '可重跑：node setup.mjs --reinstall-torch')
+    }
     log('✓ 依赖安装完成')
   }
 
