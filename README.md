@@ -69,7 +69,7 @@
 > 想提前预热、或断网/锁网环境需要离线安装，也可以手动跑安装器（同一套逻辑，幂等）：
 >
 > ```powershell
-> node setup.mjs                          # 一键：下载 → 解压 → venv → 依赖 → 自检
+> node setup.mjs                          # 一键：内置引擎 → 下载模型 → venv → 依赖 → 自检
 > node setup.mjs --from D:\CalibGuard-GUI.zip   # 用已下载的发行包，不联网
 > node setup.mjs --dest D:\CG_GUI         # 装到自定义位置（之后配置 engineRoot）
 > ```
@@ -81,7 +81,7 @@
 
 1. **DSH**（DeepSeek Harness）0.1.5-rc.2 实测可用；
 2. **Python**：无需预装——没有 64 位 3.10–3.12 时安装器会自动下载便携版（缓存在 `~/.dsh/calibguard-tools`，可用 `--no-portable-python` 关闭）；
-3. **引擎**：插件自带；模型权重会自动从 npm 镜像下载。也可用 `--from` 指定 CG 发行包，或把 `engineRoot` 指向已有 `CG_GUI/`。
+3. **引擎**：插件自带；模型权重会自动从本仓库 Release 下载（自动镜像回退）。也可用 `--from` 指定 CG 发行包，或把 `engineRoot` 指向已有 `CG_GUI/`。
 
 ### 方式 0：桌面端「添加插件」（最省事，推荐）
 

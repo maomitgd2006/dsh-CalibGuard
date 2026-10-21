@@ -76,7 +76,7 @@ once (depends on network and pip mirror).
 > You can also pre-warm, or install offline, by running the same installer manually (idempotent):
 >
 > ```powershell
-> node setup.mjs                          # bundled engine → npm model shards → venv → deps → self-check
+> node setup.mjs                          # bundled engine → model release asset → venv → deps → self-check
 > node setup.mjs --from D:\CalibGuard-GUI.zip   # use an already-downloaded release zip (offline)
 > node setup.mjs --dest D:\CG_GUI         # custom location (then configure engineRoot)
 > ```
