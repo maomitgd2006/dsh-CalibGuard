@@ -13,6 +13,7 @@
 | **审计结果在哪里 / 怎么清空** | 引擎 `reports/` 目录（默认 `<engineRoot>/reports`）：每次审计生成 JSON + Markdown；面板结果区显示路径并有「清空结果」，工具返回 `report_md_path` / `report_json_path` |
 | **每次审计都提示"首次会加载模型"** | 0.3.3 起仅在模型未加载时提示；加载后不再出现，顶部状态显示「模型 已加载」 |
 | **有 NVIDIA 显卡但引擎显示 CPU** | 装的是 CPU 版 torch。升级到 ≥0.3.3（面板顶部会提示），然后在插件目录运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）装 CUDA 版；装完重启 DSH。`DSH_CALIBGUARD_CPU_ONLY=1` 可反向强制 CPU |
+| **已经装了 CPU 版 torch，想换成 GPU 版** | 升级到 ≥0.3.5：面板顶部点「一键重装 GPU 版 torch（约 2.5 GB）」（先卸载再装，完成自动重启桥接）；或命令行 `node "<插件目录>/setup.mjs" --reinstall-torch --force-cuda` |
 | **想强制装 GPU / CPU 版 torch** | 安装时加 `--force-cuda` / `--cpu`（可配合 `--reinstall-torch` 覆盖已装版本）；CPU 版与 CUDA 版不能共存于同一 venv，CUDA 版在无 GPU 时会自动回落 CPU |
 | **首次安装特别慢 / 提示某个源不可用** | 模型默认 4 路并发分段下载（`DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS` 可调），GitHub 失败自动换 gh-proxy/ghfast/ghproxy 镜像；pip 自动在 清华/阿里/中科大/腾讯/官方 之间回退。实在慢可手动下载 `calibguard-model-1.0.0.zip` 放到缓存目录（见下一条） |
 | **模型下载失败 / 想离线** | 手动下载 `calibguard-model-1.0.0.zip`（Release `model-v1.0.0`），解压出 `model.safetensors` 放到 `~/.dsh/calibguard-tools/model-cache/model.safetensors`（或 `<engineRoot>/models/codebert_finetuned/`），重跑安装即会校验 SHA 并跳过下载 |

@@ -4,7 +4,7 @@ English | [中文](README.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-95%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-103%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 Plugs the [CalibGuard](https://github.com/P-436/CG) file-security auditing engine into
@@ -85,6 +85,10 @@ checks — use at your own risk) or `node setup.mjs --cpu` (force CPU), or the e
 > The CPU and CUDA builds of torch **cannot coexist in one venv** (same package name; installing one replaces
 > the other). The CUDA build is a full torch and falls back to CPU when no GPU is available, so coexistence is
 > unnecessary.
+>
+> **Machines that already have the CPU build**: with ≥0.3.5 the panel header detects "NVIDIA … but torch is the
+> CPU build" and offers a **one-click "Reinstall GPU torch (~2.5 GB)"** button (uninstalls the CPU build, installs
+> CUDA, then restarts the bridge). CLI equivalent: `node "<plugin dir>/setup.mjs" --reinstall-torch --force-cuda`.
 
 **Where to watch progress**: the panel shows a "First run: preparing engine and dependencies" card with
 the current step and the tail of the installer output; host logs show `[calibguard]` lines. The audit
@@ -295,7 +299,7 @@ dsh-CalibGuard/
 ├── engine/              Bundled engine core copied from CG_GUI (code / tokenizer / calibration, no weights)
 ├── cordis.patch.yml     Bundle patch (inserts the loader row)
 ├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
-├── test/                node --test (95 cases; auto-skip when the engine env is missing)
+├── test/                node --test (103 cases; auto-skip when the engine env is missing)
 ├── .github/workflows/   publish.yml: npm trusted publishing (OIDC, optional)
 └── docs/                configuration, performance, troubleshooting, plugin contract, design notes
 ```

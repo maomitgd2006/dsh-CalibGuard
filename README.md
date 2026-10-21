@@ -4,7 +4,7 @@
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-95%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-103%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 把 [CalibGuard](https://github.com/P-436/CG) 的文件安全审计引擎接进 **DeepSeek Harness（DSH）**：
@@ -78,6 +78,10 @@ GitHub 直连失败会自动换 gh-proxy / ghfast / ghproxy 镜像；pip 依赖�
 
 > CPU 版与 CUDA 版 torch **不能同时存在于同一个 venv**（同名包会互相覆盖）；
 > 但 CUDA 版 torch 本身就是完整 torch，没有 GPU 时会自动用 CPU，所以不需要共存。
+>
+> **已经有 CPU 版的机器**：升级到 ≥0.3.5 后，面板顶部会显示「检测到 NVIDIA … 但当前 torch 是 CPU 版」
+> 并提供 **「一键重装 GPU 版 torch（约 2.5 GB）」** 按钮（会先卸载 CPU 版再装 CUDA 版，完成后自动重启桥接）；
+> 也可以用命令行：`node "<插件目录>/setup.mjs" --reinstall-torch --force-cuda`。
 
 **进度在哪看**：面板顶部会出现「首次运行：正在自动准备引擎与依赖」卡片（含当前步骤与输出尾巴）；
 宿主日志里是 `[calibguard]` 开头的行。准备期间审计按钮不可用，完成后点「刷新状态」即可。
@@ -282,7 +286,7 @@ dsh-CalibGuard/
 ├── engine/              从 CG_GUI 复制来的引擎核心（代码/词表/校准参数，不含 475 MB 权重）
 ├── cordis.patch.yml     组合包 patch（把插件行插进 profile 配置树）
 ├── scripts/             link-dsh（开发期挂包）、bridge-selftest（引擎自检）
-├── test/                node --test（95 个用例；缺引擎环境时自动 skip）
+├── test/                node --test（103 个用例；缺引擎环境时自动 skip）
 ├── .github/workflows/   publish.yml：npm 可信发布（OIDC，可选）
 └── docs/                配置全表、性能、排错、插件契约、实现决策
 ```

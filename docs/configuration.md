@@ -30,7 +30,7 @@
 
 > **GPU 定档**：安装器检测到 NVIDIA 且 CUDA ≥ 12.8、算力 ≥ 7.5 时自动装 CUDA（cu128）版 torch，
 > 否则装 CPU 版。已经装成 CPU 版时：在插件目录运行 `node setup.mjs --reinstall-torch`。
-> 手动覆盖：`--force-cuda` / `--cpu`（或环境变量）决定**安装哪个 build**；插件配置 `device`
+> 手动覆盖：`--force-cuda` / `--cpu`（或环境变量）决定**安装哪个 build**（面板顶部也有「一键重装 GPU 版 torch」按钮，走 `POST /install-torch`）；插件配置 `device`
 > （auto/cpu/cuda）决定**运行时用哪个设备**。CPU 版与 CUDA 版 torch 不能共存于同一个 venv
 >（同名包互斥）；CUDA 版在无 GPU 时也能跑 CPU。
 
