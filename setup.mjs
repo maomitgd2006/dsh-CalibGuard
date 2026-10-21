@@ -35,7 +35,7 @@ const PY_MIN = 10
 const PY_MAX = 12
 
 /** 引擎下载的镜像前缀：GitHub 直连失败时依次重试。 */
-const ENGINE_MIRRORS = ['https://ghproxy.cn/', 'https://gh-proxy.com/', 'https://ghfast.top/']
+const ENGINE_MIRRORS = ['https://gh-proxy.com/', 'https://ghfast.top/', 'https://ghproxy.cn/']
 /** pip 索引：默认清华镜像，失败回退官方 PyPI。 */
 const DEFAULT_PIP_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
 const OFFICIAL_PIP_INDEX = 'https://pypi.org/simple'
@@ -86,6 +86,9 @@ const MODEL_URL = 'https://github.com/maomitgd2006/dsh-CalibGuard/releases/downl
 /** 完整模型的 SHA-256（与 CG 发行包里的 model.safetensors 完全一致）。 */
 const MODEL_SHA256 = '2f088a00c1a08c9331a58de2b9adc9bb7ace8f28a2491ee7b699f41c7b7efc65'
 
+/** 模型压缩包的合理大小下限（防止镜像返回错误页被当成压缩包）。 */
+const MODEL_ZIP_MIN_BYTES = 400 * 1024 ** 2
+
 /** 文件 SHA-256（流式，避免大文件占内存）。 */
 function sha256File(file) {
   return new Promise((resolvePromise, rejectPromise) => {
@@ -98,9 +101,9 @@ function sha256File(file) {
 }
 
 /**
- * 准备模型权重：下载本仓库 Release 里的模型压缩包 → 校验 SHA-256 → 缓存到
+ * 准备模型权重：下载本仓库 Release 里的模型压缩包 → 校验尺寸/SHA-256 → 缓存到
  * `~/.dsh/calibguard-tools/model-cache` → 复制进引擎目录。
- * 支持断点续传、ghproxy 镜像；已缓存时秒级完成。
+ * 每个镜像都会完整尝试（下载 → 解压 → 校验），坏镜像不会污染结果；已缓存时秒级完成。
  */
 async function fetchModelWeights(dest) {
   const cacheDir = join(toolsDir(), 'model-cache')
@@ -114,42 +117,48 @@ async function fetchModelWeights(dest) {
     modelFile = cachedModel
   } else {
     const zipPath = join(cacheDir, 'calibguard-model-1.0.0.zip')
+    const unpacked = join(cacheDir, 'unpacked')
     let lastError = null
     for (const url of mirroredUrls(MODEL_URL)) {
       try {
         log(`下载模型权重（约 442 MB）：${url}`)
         await download(url, zipPath)
+        const size = statSync(zipPath).size
+        if (size < MODEL_ZIP_MIN_BYTES) {
+          throw new SetupError(`下载内容异常（${bytes(size)}，预期约 442 MB，可能是镜像错误页）`)
+        }
+        rmSync(unpacked, { recursive: true, force: true })
+        mkdirSync(unpacked, { recursive: true })
+        extract(zipPath, unpacked)
+        const found = findBinary(unpacked, 'model.safetensors')
+        if (!found) throw new SetupError('模型压缩包里没有 model.safetensors')
+        const actual = await sha256File(found)
+        if (actual !== MODEL_SHA256) throw new SetupError(`模型 SHA-256 不匹配：${actual}`)
+        deleteFile(cachedModel)
+        try {
+          renameSync(found, cachedModel)
+        } catch {
+          copyFileSync(found, cachedModel)
+        }
+        rmSync(unpacked, { recursive: true, force: true })
+        deleteFile(zipPath)
+        modelFile = cachedModel
         lastError = null
+        log(`✓ 模型已缓存：${cachedModel}`)
         break
       } catch (error) {
         lastError = error
-        warn(`下载源失败：${String(error.message).split('\n')[0]}`)
+        warn(`下载源失败：${String(error.message).split('\n')[0]}，换下一个源…`)
+        deleteFile(zipPath)
         deleteFile(`${zipPath}.part`)
+        rmSync(unpacked, { recursive: true, force: true })
       }
     }
-    if (lastError) {
-      throw new SetupError(`模型下载失败：${lastError.message}\n`
+    if (!modelFile) {
+      throw new SetupError(`模型下载失败：${lastError?.message ?? '未知错误'}\n`
         + `可以重试（支持断点续传），或手动下载后放到：${cachedModel}\n`
         + '（下载地址：https://github.com/maomitgd2006/dsh-CalibGuard/releases/tag/model-v1.0.0）')
     }
-    const unpacked = join(cacheDir, 'unpacked')
-    rmSync(unpacked, { recursive: true, force: true })
-    mkdirSync(unpacked, { recursive: true })
-    extract(zipPath, unpacked)
-    const found = findBinary(unpacked, 'model.safetensors')
-    if (!found) throw new SetupError(`模型压缩包里没有 model.safetensors：${unpacked}`)
-    const actual = await sha256File(found)
-    if (actual !== MODEL_SHA256) throw new SetupError(`模型 SHA-256 不匹配：${actual}`)
-    deleteFile(cachedModel)
-    try {
-      renameSync(found, cachedModel)
-    } catch {
-      copyFileSync(found, cachedModel)
-    }
-    rmSync(unpacked, { recursive: true, force: true })
-    deleteFile(zipPath)
-    modelFile = cachedModel
-    log(`✓ 模型已缓存：${cachedModel}`)
   }
 
   log(`写入引擎目录：${finalPath}`)
@@ -680,11 +689,15 @@ async function main() {
         for (const candidate of candidates) {
           try {
             await download(candidate, downloadedZip)
+            if (statSync(downloadedZip).size < 100 * 1024 ** 2) {
+              throw new SetupError('下载内容明显偏小，可能是镜像错误页')
+            }
             lastError = null
             break
           } catch (error) {
             lastError = error
             warn(`下载源失败：${String(error.message).split('\n')[0]}`)
+            rmSync(downloadedZip, { force: true })
             rmSync(`${downloadedZip}.part`, { force: true })
           }
         }

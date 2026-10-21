@@ -48,6 +48,7 @@
     }
   },
   "scripts": {
+    "prepack": "node -e \"const fs=require('fs');for(const d of ['bridge','engine']){if(!fs.existsSync(d))continue;for(const f of fs.readdirSync(d,{withFileTypes:true})){if(f.isDirectory()&&f.name==='__pycache__')fs.rmSync(d+'/'+f.name,{recursive:true,force:true});else if(f.isFile()&&f.name.endsWith('.pyc'))fs.rmSync(d+'/'+f.name,{force:true});}}\"",
     "test": "node --test",
     "setup": "node setup.mjs",
     "link-dsh": "node scripts/link-dsh.mjs",
