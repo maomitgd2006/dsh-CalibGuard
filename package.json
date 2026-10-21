@@ -1,6 +1,6 @@
 {
   "name": "dsh-calibguard",
-  "version": "0.2.5",
+  "version": "0.3.0",
   "publishConfig": {
     "access": "public"
   },
@@ -16,9 +16,9 @@
   "main": "lib/index.js",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/maomitgd2006/DSH_CG.git"
+    "url": "git+https://github.com/maomitgd2006/dsh-CalibGuard.git"
   },
-  "homepage": "https://github.com/maomitgd2006/DSH_CG#readme",
+  "homepage": "https://github.com/maomitgd2006/dsh-CalibGuard#readme",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
@@ -27,6 +27,7 @@
   "files": [
     "lib",
     "bridge",
+    "engine",
     "cordis.patch.yml",
     "docs",
     "setup.mjs",

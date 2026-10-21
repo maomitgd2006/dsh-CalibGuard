@@ -18,7 +18,11 @@
  *
  * 无第三方依赖，只用 Node 内置模块；下载走 Node 20+ 的 fetch。
  */
-import { chmodSync, copyFileSync, createWriteStream, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'node:fs'
+import {
+  chmodSync, copyFileSync, cpSync, createReadStream, createWriteStream, existsSync, mkdirSync,
+  readdirSync, renameSync, rmSync, statSync,
+} from 'node:fs'
+import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { spawn, spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -26,11 +30,144 @@ import { homedir } from 'node:os'
 import { Readable } from 'node:stream'
 
 const PKG_ROOT = dirname(fileURLToPath(import.meta.url))
-const DEFAULT_DEST = resolve(PKG_ROOT, '..', 'CG_GUI')
-const DEFAULT_URL = 'https://github.com/P-436/CG/releases/download/v1.0.0/CalibGuard-GUI.zip'
 /** torch 官方轮子目前覆盖的 Python 版本上限（3.13/3.14 装不上 torch）。 */
 const PY_MIN = 10
 const PY_MAX = 12
+
+/** 引擎下载的镜像前缀：GitHub 直连失败时依次重试。 */
+const ENGINE_MIRRORS = ['https://ghproxy.cn/', 'https://gh-proxy.com/', 'https://ghfast.top/']
+/** pip 索引：默认清华镜像，失败回退官方 PyPI。 */
+const DEFAULT_PIP_INDEX = 'https://pypi.tuna.tsinghua.edu.cn/simple'
+const OFFICIAL_PIP_INDEX = 'https://pypi.org/simple'
+
+/** DSH 主目录。 */
+function dshHomeDir() {
+  const fromEnv = process.env.DSH_HOME && process.env.DSH_HOME.trim()
+  return fromEnv ? resolve(fromEnv) : join(homedir(), '.dsh')
+}
+
+/**
+ * 默认引擎目录：
+ * - 源码仓库（本包不在 node_modules 里）→ 与本包同级的 CG_GUI；
+ * - 从 npm / GitHub 装进 node_modules → 放 DSH 主目录，避免被包管理器升级清掉。
+ */
+function defaultDest() {
+  const installed = PKG_ROOT.split(/[\\/]/).includes('node_modules')
+  return installed ? join(dshHomeDir(), 'calibguard-engine') : resolve(PKG_ROOT, '..', 'CG_GUI')
+}
+const DEFAULT_DEST = defaultDest()
+
+/** 给 GitHub 直链生成「直连 + 镜像」候选列表。 */
+function mirroredUrls(url) {
+  const extra = String(process.env.DSH_CALIBGUARD_ENGINE_MIRRORS || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+  const urls = [url]
+  for (const prefix of [...extra, ...ENGINE_MIRRORS]) {
+    const candidate = prefix + url
+    if (!urls.includes(candidate)) urls.push(candidate)
+  }
+  return urls
+}
+
+/** pip 索引候选（自定义 → 清华镜像 → 官方源）。 */
+function pipIndexes() {
+  const custom = String(process.env.DSH_CALIBGUARD_PIP_INDEX || process.env.PIP_INDEX_URL || '').trim()
+  return [...new Set([custom, DEFAULT_PIP_INDEX, OFFICIAL_PIP_INDEX].filter(Boolean))]
+}
+
+/** 插件内置引擎目录：CG_GUI 核心文件（代码 / 词表 / 校准参数），不含 476 MB 模型权重。 */
+const BUNDLED_ENGINE = join(PKG_ROOT, 'engine')
+
+/** 模型权重下载地址：放在本仓库的 Release 资产上（GitHub 直连失败会自动尝试 ghproxy 等镜像）。 */
+const MODEL_URL = 'https://github.com/maomitgd2006/dsh-CalibGuard/releases/download/model-v1.0.0/calibguard-model-1.0.0.zip'
+
+/** 完整模型的 SHA-256（与 CG 发行包里的 model.safetensors 完全一致）。 */
+const MODEL_SHA256 = '2f088a00c1a08c9331a58de2b9adc9bb7ace8f28a2491ee7b699f41c7b7efc65'
+
+/** 文件 SHA-256（流式，避免大文件占内存）。 */
+function sha256File(file) {
+  return new Promise((resolvePromise, rejectPromise) => {
+    const hash = createHash('sha256')
+    createReadStream(file)
+      .on('data', (chunk) => hash.update(chunk))
+      .on('error', rejectPromise)
+      .on('end', () => resolvePromise(hash.digest('hex')))
+  })
+}
+
+/**
+ * 准备模型权重：下载本仓库 Release 里的模型压缩包 → 校验 SHA-256 → 缓存到
+ * `~/.dsh/calibguard-tools/model-cache` → 复制进引擎目录。
+ * 支持断点续传、ghproxy 镜像；已缓存时秒级完成。
+ */
+async function fetchModelWeights(dest) {
+  const cacheDir = join(toolsDir(), 'model-cache')
+  mkdirSync(cacheDir, { recursive: true })
+  const cachedModel = join(cacheDir, 'model.safetensors')
+  const finalPath = join(dest, 'models', 'codebert_finetuned', 'model.safetensors')
+
+  let modelFile = ''
+  if (existsSync(cachedModel) && (await sha256File(cachedModel)) === MODEL_SHA256) {
+    log(`✓ 复用已缓存的模型：${cachedModel}`)
+    modelFile = cachedModel
+  } else {
+    const zipPath = join(cacheDir, 'calibguard-model-1.0.0.zip')
+    let lastError = null
+    for (const url of mirroredUrls(MODEL_URL)) {
+      try {
+        log(`下载模型权重（约 442 MB）：${url}`)
+        await download(url, zipPath)
+        lastError = null
+        break
+      } catch (error) {
+        lastError = error
+        warn(`下载源失败：${String(error.message).split('\n')[0]}`)
+        deleteFile(`${zipPath}.part`)
+      }
+    }
+    if (lastError) {
+      throw new SetupError(`模型下载失败：${lastError.message}\n`
+        + `可以重试（支持断点续传），或手动下载后放到：${cachedModel}\n`
+        + '（下载地址：https://github.com/maomitgd2006/dsh-CalibGuard/releases/tag/model-v1.0.0）')
+    }
+    const unpacked = join(cacheDir, 'unpacked')
+    rmSync(unpacked, { recursive: true, force: true })
+    mkdirSync(unpacked, { recursive: true })
+    extract(zipPath, unpacked)
+    const found = findBinary(unpacked, 'model.safetensors')
+    if (!found) throw new SetupError(`模型压缩包里没有 model.safetensors：${unpacked}`)
+    const actual = await sha256File(found)
+    if (actual !== MODEL_SHA256) throw new SetupError(`模型 SHA-256 不匹配：${actual}`)
+    deleteFile(cachedModel)
+    try {
+      renameSync(found, cachedModel)
+    } catch {
+      copyFileSync(found, cachedModel)
+    }
+    rmSync(unpacked, { recursive: true, force: true })
+    deleteFile(zipPath)
+    modelFile = cachedModel
+    log(`✓ 模型已缓存：${cachedModel}`)
+  }
+
+  log(`写入引擎目录：${finalPath}`)
+  mkdirSync(dirname(finalPath), { recursive: true })
+  deleteFile(finalPath)
+  copyFileSync(modelFile, finalPath)
+  const finalSha = await sha256File(finalPath)
+  if (finalSha !== MODEL_SHA256) {
+    deleteFile(finalPath)
+    throw new SetupError(`写入后模型校验失败（SHA-256 ${finalSha}），请重试。`)
+  }
+  log(`✓ 模型已就绪：${finalPath}（${bytes(statSync(finalPath).size)}）`)
+}
+
+/** 删除文件（不存在也不报错）。 */
+function deleteFile(file) {
+  rmSync(file, { force: true })
+}
 
 // ============================== 输出与进程 ==============================
 
@@ -78,7 +215,7 @@ function parseArgs(argv) {
   const options = {
     dest: DEFAULT_DEST,
     from: '',
-    url: DEFAULT_URL,
+    url: '',
     python: '',
     skipDownload: false,
     skipVenv: false,
@@ -123,8 +260,9 @@ function printHelp() {
 
 选项：
   --dest <dir>      引擎安装目录（默认：本包同级的 CG_GUI）
-  --from <zip>      使用本地已下载的发行包（不联网）
-  --url <url>       发行包下载地址（默认：CG 的 v1.0.0 Release 资产）
+  --from <zip>      使用本地已下载的 CG 发行包（解压安装）
+  --url <url>       从指定地址下载 CG 发行包并解压安装
+                   （默认不下载 CG 包：用插件内置引擎 + 从 npm 镜像取模型分片）
   --python <exe>    指定 Python 解释器（需 3.10–3.12）
   --skip-download   跳过下载（已有引擎或 --from 时）
   --skip-venv       跳过创建虚拟环境
@@ -141,9 +279,16 @@ function printHelp() {
   node setup.mjs --dest D:\\CG_GUI --skip-download
 
 说明：
-  • 引擎约 480 MB（含 475 MB 模型权重），依赖安装另需约 1–3 GB 磁盘；
+  • 默认用插件内置的引擎（CG_GUI 核心代码，约 5 MB），模型权重（475 MB）分两片
+    从 npm 镜像下载（npmmirror 加速，每个分片 < 256 MB）；也可用 --from 指定 CG 发行包；
+  • 依赖安装另需约 1–3 GB 磁盘；
   • 本机没有 64 位 Python 3.10–3.12 时，会自动用 uv 下载便携 Python 3.10.8（约 30 MB）；
-  • 默认用 PyPI 的 CPU 版 torch 即可（低算力显卡本来也会被定档到 CPU）；
+  • 下载默认走 GitHub 直连，失败会自动尝试 ghproxy / gh-proxy / ghfast 镜像；
+    可用 DSH_CALIBGUARD_ENGINE_MIRRORS 追加镜像前缀（逗号分隔）；
+  • pip 默认用清华镜像（pypi.tuna.tsinghua.edu.cn），失败自动回退官方 PyPI；
+    可用 DSH_CALIBGUARD_PIP_INDEX 指定其它索引；
+  • 从 npm 安装时引擎默认放在 ~/.dsh/calibguard-engine（可用 --dest 或插件配置 engineRoot 指定）；
+  • 默认用 CPU 版 torch（低算力显卡本来也会被定档到 CPU）；
     要用 GPU 请按 PyTorch 官网自行安装对应 CUDA 轮子。
 `)
 }
@@ -166,53 +311,90 @@ function describeEngine(status) {
 
 // ============================== 下载 ==============================
 
+/**
+ * 下载一个文件。
+ * - 断点续传：已有 `<file>.part` 时用 Range 续传（服务器不支持则从头下）；
+ * - 空闲超时：120 秒收不到数据就中止，避免界面「一直卡在准备中」；
+ * - 失败时保留 .part，换源/重试可继续。
+ */
 async function download(url, file) {
   log(`下载：${url}`)
   mkdirSync(dirname(file), { recursive: true })
   const temp = `${file}.part`
-  rmSync(temp, { force: true })
+  const resumed = existsSync(temp) ? statSync(temp).size : 0
+  if (resumed > 0) log(`发现未完成的下载，尝试续传（已有 ${bytes(resumed)}）`)
+
+  const controller = new AbortController()
+  let idleTimer = null
+  const resetIdle = () => {
+    if (idleTimer) clearTimeout(idleTimer)
+    idleTimer = setTimeout(() => controller.abort(new Error('120 秒没有收到数据')), 120_000)
+  }
+  const clearIdle = () => { if (idleTimer) { clearTimeout(idleTimer); idleTimer = null } }
 
   let response
   try {
-    response = await fetch(url, { redirect: 'follow' })
+    resetIdle()
+    response = await fetch(url, {
+      redirect: 'follow',
+      signal: controller.signal,
+      headers: resumed > 0 ? { Range: `bytes=${resumed}-` } : {},
+    })
   } catch (error) {
+    clearIdle()
     throw new SetupError(`下载失败（网络错误）：${error.message}\n`
       + '可以手动下载后重试：node setup.mjs --from <下载到的 zip>')
   }
+  if (response.status === 416 && resumed > 0) {
+    clearIdle()
+    rmSync(temp, { force: true })
+    throw new SetupError('续传位置无效（HTTP 416），已清除断点，请重试。')
+  }
   if (!response.ok || !response.body) {
+    clearIdle()
     throw new SetupError(`下载失败：HTTP ${response.status} ${response.statusText}\n`
       + '可以手动下载后重试：node setup.mjs --from <下载到的 zip>')
   }
 
-  const total = Number(response.headers.get('content-length') || 0)
-  log(`保存到：${file}  大小：${total ? bytes(total) : '未知'}`)
+  const partial = response.status === 206
+  const remaining = Number(response.headers.get('content-length') || 0)
+  const total = partial ? resumed + remaining : remaining
+  const append = partial && resumed > 0
+  log(`保存到：${file}  大小：${total ? bytes(total) : '未知'}${append ? '（续传）' : ''}`)
 
-  const sink = createWriteStream(temp)
+  const sink = createWriteStream(temp, { flags: append ? 'a' : 'w' })
   const reader = Readable.fromWeb(response.body)
   const startedAt = Date.now()
-  let received = 0
-  let lastPercent = 0
+  let received = append ? resumed : 0
+  let lastPercent = -1
+  let lastLogAt = 0
 
   await new Promise((resolvePromise, rejectPromise) => {
     reader.on('data', (chunk) => {
+      resetIdle()
       received += chunk.length
-      if (!total) return
-      const percent = Math.floor((received / total) * 100)
-      if (percent >= lastPercent + 2) {
-        lastPercent = percent
-        const elapsed = Math.max(1, (Date.now() - startedAt) / 1000)
-        log(`  ${percent}%  ${bytes(received)} / ${bytes(total)}  (${bytes(received / elapsed)}/s)`)
+      const now = Date.now()
+      if (total) {
+        const percent = Math.floor((received / total) * 100)
+        if (percent >= lastPercent + 2) {
+          lastPercent = percent
+          const elapsed = Math.max(1, (now - startedAt) / 1000)
+          log(`  ${percent}%  ${bytes(received)} / ${bytes(total)}  (${bytes((received - resumed) / elapsed)}/s)`)
+        }
+      } else if (now - lastLogAt > 5000) {
+        lastLogAt = now
+        const elapsed = Math.max(1, (now - startedAt) / 1000)
+        log(`  ${bytes(received)}  (${bytes((received - resumed) / elapsed)}/s)`)
       }
     })
-    reader.on('error', rejectPromise)
-    sink.on('error', rejectPromise)
-    sink.on('finish', resolvePromise)
+    reader.on('error', (error) => { clearIdle(); rejectPromise(error) })
+    sink.on('error', (error) => { clearIdle(); rejectPromise(error) })
+    sink.on('finish', () => { clearIdle(); resolvePromise() })
     reader.pipe(sink)
   })
 
   if (total && received !== total) {
-    rmSync(temp, { force: true })
-    throw new SetupError(`下载不完整：${bytes(received)} / ${bytes(total)}，请重试或用 --from 手动指定。`)
+    throw new SetupError(`下载不完整：${bytes(received)} / ${bytes(total)}（已保留断点，重试可续传）`)
   }
   rmSync(file, { force: true })
   renameSync(temp, file)
@@ -355,10 +537,7 @@ async function ensureUv(dest) {
   const dir = toolsDir()
   mkdirSync(dir, { recursive: true })
   const archive = join(dir, asset)
-  const urls = [
-    `https://github.com/astral-sh/uv/releases/latest/download/${asset}`,
-    `https://ghproxy.cn/https://github.com/astral-sh/uv/releases/latest/download/${asset}`,
-  ]
+  const urls = mirroredUrls(`https://github.com/astral-sh/uv/releases/latest/download/${asset}`)
   let downloaded = false
   for (const url of urls) {
     try {
@@ -460,7 +639,7 @@ async function main() {
     const { statfsSync } = await import('node:fs')
     const free = Number(statfsSync(options.dest).bavail) * Number(statfsSync(options.dest).bsize)
     log(`目标盘剩余空间：${bytes(free)}`)
-    if (free < 4 * 1024 ** 3) warn('剩余空间不足 4 GB：下载(约 467 MB) + 解压(约 480 MB) + 依赖(1–3 GB) 可能不够。')
+    if (free < 4 * 1024 ** 3) warn('剩余空间不足 4 GB：模型(约 476 MB) + 依赖(1–3 GB) 可能不够。')
   } catch { /* 平台不支持就跳过 */ }
 
   // ---------- 1. 引擎 ----------
@@ -482,14 +661,6 @@ async function main() {
     log('\n跳过下载（--skip-download）：直接使用现有目录')
   } else {
     step('准备引擎')
-    let zipFile = options.from
-    if (!zipFile) {
-      downloadedZip = join(dirname(options.dest), `CalibGuard-GUI-${Date.now()}.zip`)
-      await download(options.url, downloadedZip)
-      zipFile = downloadedZip
-    } else {
-      log(`使用本地压缩包：${zipFile}（${bytes(statSync(zipFile).size)}）`)
-    }
     if (options.force && existsSync(options.dest)) {
       warn(`--force：清空已有目录 ${options.dest}`)
       rmSync(options.dest, { recursive: true, force: true })
@@ -498,18 +669,63 @@ async function main() {
     if (readdirSync(options.dest).length > 0 && !options.force) {
       warn('目标目录非空：将覆盖同名文件（如需全新安装请加 --force）')
     }
-    extract(zipFile, options.dest)
+
+    if (options.from || options.url) {
+      // 显式指定了 CG 发行包（--from 本地 zip / --url 下载 zip）
+      let zipFile = options.from
+      if (!zipFile) {
+        downloadedZip = join(dirname(options.dest), `CalibGuard-GUI-${Date.now()}.zip`)
+        const candidates = mirroredUrls(options.url)
+        let lastError = null
+        for (const candidate of candidates) {
+          try {
+            await download(candidate, downloadedZip)
+            lastError = null
+            break
+          } catch (error) {
+            lastError = error
+            warn(`下载源失败：${String(error.message).split('\n')[0]}`)
+            rmSync(`${downloadedZip}.part`, { force: true })
+          }
+        }
+        if (lastError) {
+          fail(`引擎下载失败：${lastError.message}\n`
+            + '可手动下载后重试：node setup.mjs --from <CalibGuard-GUI.zip>\n'
+            + '或在插件配置里把 engineRoot 指向已有的 CG_GUI 目录。')
+        }
+        zipFile = downloadedZip
+      } else {
+        log(`使用本地压缩包：${zipFile}（${bytes(statSync(zipFile).size)}）`)
+      }
+      extract(zipFile, options.dest)
+      if (downloadedZip) {
+        rmSync(downloadedZip, { force: true })
+        log('已清理下载的临时压缩包')
+      }
+    } else {
+      // 默认：内置引擎（CG_GUI 核心文件）+ npm 分片下载模型
+      if (!existsSync(BUNDLED_ENGINE)) {
+        fail(`安装包缺少内置引擎目录：${BUNDLED_ENGINE}\n`
+          + '（安装包可能不完整；可用 --from 指定 CG 发行包，或在插件配置里把 engineRoot 指向已有 CG_GUI）')
+      }
+      log('复制内置引擎（CG_GUI 核心：代码 / 词表 / 校准参数）…')
+      cpSync(BUNDLED_ENGINE, options.dest, { recursive: true, force: true })
+      const modelPath = join(options.dest, 'models', 'codebert_finetuned', 'model.safetensors')
+      if (existsSync(modelPath) && (await sha256File(modelPath)) === MODEL_SHA256) {
+        log('✓ 模型权重已存在，跳过下载')
+      } else {
+        step('下载模型权重（约 442 MB，GitHub 失败自动换镜像）')
+        await fetchModelWeights(options.dest)
+      }
+    }
+
     const after = engineStatus(options.dest)
     if (!after.hasEngine) {
-      fail(`解压完成，但 ${options.dest} 里没有 calibguard/。\n`
-        + '请确认压缩包是 CG 的发行包 CalibGuard-GUI.zip（其根目录应包含 calibguard/ 与 models/）。')
+      fail(`引擎准备完成，但 ${options.dest} 里没有 calibguard/。\n`
+        + '请确认安装包完整，或用 --from 指定 CG 的发行包 CalibGuard-GUI.zip。')
     }
     if (!after.hasModel || !after.hasCalibration) {
       warn('没找到模型权重或校准参数（models/）：引擎能启动，但审计会失败，请确认下载完整。')
-    }
-    if (downloadedZip) {
-      rmSync(downloadedZip, { force: true })
-      log('已清理下载的临时压缩包')
     }
   }
 
@@ -560,8 +776,22 @@ async function main() {
     if (!existsSync(python)) fail(`找不到虚拟环境解释器：${python}`)
     const requirements = join(options.dest, 'requirements-gui.txt')
     if (!existsSync(requirements)) fail(`找不到依赖清单：${requirements}`)
-    await runLive(python, ['-m', 'pip', 'install', '--upgrade', 'pip', '--quiet'])
-    await runLive(python, ['-m', 'pip', 'install', '-r', requirements])
+    const installWithMirrors = async (args) => {
+      let lastError = null
+      for (const index of pipIndexes()) {
+        log(`pip 源：${index}`)
+        try {
+          await runLive(python, ['-m', 'pip', 'install', '--timeout', '180', '--retries', '5', '-i', index, ...args])
+          return
+        } catch (error) {
+          lastError = error
+          warn(`pip 安装失败（${index}）：${error.message}`)
+        }
+      }
+      throw lastError ?? new SetupError('pip 安装失败')
+    }
+    await installWithMirrors(['--upgrade', 'pip', '--quiet'])
+    await installWithMirrors(['-r', requirements])
     log('✓ 依赖安装完成')
   }
 

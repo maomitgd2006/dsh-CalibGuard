@@ -9,7 +9,8 @@
 | 每份文件都 `manual_review` + `CUDA error: no kernel image` | 设备定档失效：确认 `device` 未被强制成 `cuda` |
 | 灰区全部转人工、`llm.status=api_error` | 没配凭据（预期降级）→ 设 `credentialRef`（推荐）或在 DSH Models 页配置 |
 | `凭据引用 X 未配置` 告警 | `credentialRef` 指向的引用在 DSH 凭据库里没有值；在 Models 页填 Key 或用 `llmApiKey` |
-| **首次运行卡在"正在准备环境"** | 正常：首次自动下载引擎（467 MB）+ 装依赖（1–3 GB），约 10–20 分钟；面板顶部有进度与输出尾巴 |
+| **模型下载失败 / 想离线** | 手动下载 `calibguard-model-1.0.0.zip`（Release `model-v1.0.0`），解压出 `model.safetensors` 放到 `~/.dsh/calibguard-tools/model-cache/model.safetensors`（或 `<engineRoot>/models/codebert_finetuned/`），重跑安装即会校验 SHA 并跳过下载 |
+| **首次运行卡在"正在准备环境"** | 正常：首次下载模型（约 442 MB，自动镜像回退）+ 装依赖（1–3 GB），约 10–20 分钟；面板顶部有进度与输出尾巴。若长时间无进度，可看 `~/.dsh/calibguard-tools/model-cache` 是否在增长 |
 | 环境准备失败 | 面板会显示失败原因与最后几行输出；在本插件目录跑 `node setup.mjs` 看完整输出后重试（也支持 `--from` 离线包） |
 | **本机没有 Python** | 会自动用 uv 下载便携 Python 3.10.8（约 30 MB，缓存 `~/.dsh/calibguard-tools`）；若这一步失败会自动给出 python.org 下载链接，也可用 `--python` 指定解释器 |
 | 大文件审计几十秒 | 正常：耗时 ≈ 窗口数 ÷ CPU 吞吐，见 [performance.md](performance.md) |

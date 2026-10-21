@@ -53,15 +53,20 @@ file sha256, and the report path.
 
 ### Before you start: engine dependencies are prepared automatically (like CG_GUI's launcher)
 
-This plugin is only the wrapper: the auditing engine (`calibguard/` + **475 MB of model weights**) and its
-Python dependencies must be present. **You don't install them by hand.** After you install the plugin and
-restart DSH, if `<engineRoot>/.venv` is missing the plugin automatically, in the background:
+The plugin **ships the engine code** (`engine/`: `calibguard/`, `audit_service.py`, tokenizer files and
+calibration parameters copied from CG_GUI); only the **475 MB of model weights** and the Python dependencies
+are missing. **You don't install them by hand.** After you install the plugin and restart DSH, if
+`<engineRoot>/.venv` is missing the plugin automatically, in the background:
 
-1. downloads the official CG release `CalibGuard-GUI.zip` (~467 MB) and extracts it to `CG_GUI/`
-   **next to this package**;
-2. creates `.venv` (**no preinstalled Python required**: if no 64-bit 3.10–3.12 is found, a portable Python 3.10.8 is downloaded automatically, ~30 MB);
-3. installs dependencies from `requirements-gui.txt` (1–3 GB);
-4. becomes ready — tools and the panel just work.
+1. copies the bundled `engine/` into `<engineRoot>` (default `~/.dsh/calibguard-engine`);
+2. downloads the model weights from a **release asset of this repository** (~442 MB; GitHub is tried first,
+   then ghproxy-style mirrors; cached in `~/.dsh/calibguard-tools/model-cache`);
+3. creates `.venv` (**no preinstalled Python required**: if no 64-bit 3.10–3.12 is found, a portable Python 3.10.8 is downloaded automatically, ~30 MB);
+4. installs dependencies from `requirements-gui.txt` (1–3 GB, Tsinghua PyPI mirror by default);
+5. becomes ready — tools and the panel just work.
+
+> The CG release zip is **no longer downloaded from GitHub by default**; only an explicit
+> `node setup.mjs --from <zip>` or `--url <url>` uses it (offline installs / pinning an engine version).
 
 **Where to watch progress**: the panel shows a "First run: preparing engine and dependencies" card with
 the current step and the tail of the installer output; host logs show `[calibguard]` lines. The audit
@@ -71,7 +76,7 @@ once (depends on network and pip mirror).
 > You can also pre-warm, or install offline, by running the same installer manually (idempotent):
 >
 > ```powershell
-> node setup.mjs                          # download → extract → venv → deps → self-check
+> node setup.mjs                          # bundled engine → npm model shards → venv → deps → self-check
 > node setup.mjs --from D:\CalibGuard-GUI.zip   # use an already-downloaded release zip (offline)
 > node setup.mjs --dest D:\CG_GUI         # custom location (then configure engineRoot)
 > ```
@@ -83,7 +88,7 @@ once (depends on network and pip mirror).
 
 1. **DSH** (DeepSeek Harness) — verified on 0.1.5-rc.2;
 2. **Python**: nothing to install — when no 64-bit 3.10–3.12 is available the installer downloads a portable Python automatically (cached in `~/.dsh/calibguard-tools`; disable with `--no-portable-python`);
-3. **The CG engine** — downloaded automatically, or an existing `CG_GUI/` (with `calibguard/`, `models/` and `.venv`).
+3. **Engine** — bundled with the plugin; model weights are downloaded from npm mirrors automatically. You can also pass `--from <zip>` or point `engineRoot` at an existing `CG_GUI/`.
 
 ### Option 0 — desktop "Add plugin" dialog (easiest, recommended)
 
@@ -91,7 +96,7 @@ DSH desktop → Settings → **Add plugin**, paste any one of the following (res
 
 | Paste | Example | Notes |
 |---|---|---|
-| **GitHub repository URL** (recommended) | `https://github.com/maomitgd2006/DSH_CG` | Fetches the source and registers the bundle in the current profile |
+| **GitHub repository URL** (recommended) | `https://github.com/maomitgd2006/dsh-CalibGuard` | Fetches the source and registers the bundle in the current profile |
 | **Local directory path** | `<path to this package>` (e.g. `/opt/dsh-calibguard`) | For a local clone / extracted copy |
 | **Package name** | `dsh-calibguard` | ✅ **Published on npm**; just enter the package name (installs npm `latest`) |
 
@@ -100,7 +105,7 @@ DSH desktop → Settings → **Add plugin**, paste any one of the following (res
 >
 > ```powershell
 > dsh plugin --profile <profile> add dsh-calibguard                          # npm package (recommended)
-> dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG  # GitHub source
+> dsh plugin --profile <profile> add https://github.com/maomitgd2006/dsh-CalibGuard  # GitHub source
 > dsh plugin --profile <profile> add file:<absolute path to this package>     # local directory
 > ```
 >
@@ -143,7 +148,7 @@ the optional `defineTool` / Config schema support is active (everything still wo
 ### Option C — release archive (offline / no npm)
 
 Download `dsh-calibguard-<version>.zip` (~100 KB, no `test/`) from
-[Releases](https://github.com/maomitgd2006/DSH_CG/releases/latest), extract it to a fixed directory,
+[Releases](https://github.com/maomitgd2006/dsh-CalibGuard/releases/latest), extract it to a fixed directory,
 then point the `name` in "Option B" at `<extracted dir>/lib/index.js`.
 
 ### Verify
@@ -235,7 +240,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | Symptom | Fix |
 |---|---|
 | No sidebar icon / panel says `not found` | Client bundle and routes load at host startup: **restart DSH** |
-| **First run takes 10–20 minutes** | Normal: the engine (467 MB) is downloaded and dependencies (1–3 GB) are installed once; the panel shows progress |
+| **First run takes 10–20 minutes** | Normal: the model (476 MB) is downloaded from npm mirrors and dependencies (1–3 GB) are installed once; the panel shows progress |
 | First audit is slow | Normal: ~475 MB of weights are loaded once (then the process stays resident) |
 | Big file takes tens of seconds | Normal: full-text sliding-window inference; see [docs/performance.md](docs/performance.md) |
 | Gray zone always goes to manual review | No credential configured: set `credentialRef` (recommended) or configure it in DSH Models |
@@ -250,9 +255,10 @@ Full troubleshooting table: [docs/troubleshooting.md](docs/troubleshooting.md).
 ## Layout
 
 ```
-DSH_CG/
+dsh-CalibGuard/
 ├── lib/                 Node side: plugin entry, engine manager, tools, routes, settings, browser panel
 ├── bridge/              Python bridge: persistent child process, line-delimited JSON protocol
+├── engine/              Bundled engine core copied from CG_GUI (code / tokenizer / calibration, no weights)
 ├── cordis.patch.yml     Bundle patch (inserts the loader row)
 ├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
 ├── test/                node --test (95 cases; auto-skip when the engine env is missing)
@@ -274,7 +280,7 @@ DSH_CG/
 
 | Repository | Contents |
 |---|---|
-| **maomitgd2006/DSH_CG** (this repo) | DSH plugin: tools / service / routes + browser panel + Python bridge |
+| **maomitgd2006/dsh-CalibGuard** (this repo) | DSH plugin: tools / service / routes + browser panel + Python bridge |
 | [P-436/CG](https://github.com/P-436/CG) | Engine and benchmark: `CG_GUI/` (desktop shell + engine + model), `CG_Bench/` (training/eval) |
 
 ## License

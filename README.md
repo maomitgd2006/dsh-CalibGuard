@@ -48,13 +48,19 @@
 
 ### 开始前：引擎依赖会自动准备（对齐 CG_GUI 的「首启装环境」）
 
-本插件只是"壳"：审计引擎（`calibguard/` + **475 MB 模型权重**）和 Python 依赖需要就位。
-**不用手动装**——装好插件重启 DSH 后，若检测到缺少 `<engineRoot>/.venv`，插件会在**后台自动**：
+本插件**自带引擎**（`engine/`：复制自 CG_GUI 的 `calibguard/` 包、`audit_service.py`、词表与校准参数），
+只差 **475 MB 模型权重**和 Python 依赖。**不用手动装**——装好插件重启 DSH 后，
+若检测到缺少 `<engineRoot>/.venv`，插件会在**后台自动**：
 
-1. 下载 CG 官方发行包 `CalibGuard-GUI.zip`（约 467 MB）并解压为**本包同级的 `CG_GUI/`**；
-2. 创建 `.venv`（**不需要你预装 Python**：本机没有 64 位 3.10–3.12 时会自动下载便携 Python 3.10.8，约 30 MB）；
-3. 按 `requirements-gui.txt` 安装依赖（约 1–3 GB）；
-4. 就绪后工具/面板自动可用。
+1. 把内置 `engine/` 复制到 `<engineRoot>`（默认 `~/.dsh/calibguard-engine`）；
+2. 从**本仓库 Release** 下载模型权重 `model.safetensors`（约 442 MB 压缩包，GitHub 直连失败会自动尝试 ghproxy 等镜像，
+   缓存于 `~/.dsh/calibguard-tools/model-cache`）；
+3. 创建 `.venv`（**不需要你预装 Python**：本机没有 64 位 3.10–3.12 时会自动下载便携 Python 3.10.8，约 30 MB）；
+4. 按 `requirements-gui.txt` 安装依赖（约 1–3 GB，默认清华 PyPI 镜像）；
+5. 就绪后工具/面板自动可用。
+
+> 默认**不再**从 GitHub 下载 CG 发行包；只有显式 `node setup.mjs --from <zip>` 或 `--url <地址>`
+> 才会走 CG 发行包，用于离线/指定引擎版本。
 
 **进度在哪看**：面板顶部会出现「首次运行：正在自动准备引擎与依赖」卡片（含当前步骤与输出尾巴）；
 宿主日志里是 `[calibguard]` 开头的行。准备期间审计按钮不可用，完成后点「刷新状态」即可。
@@ -75,7 +81,7 @@
 
 1. **DSH**（DeepSeek Harness）0.1.5-rc.2 实测可用；
 2. **Python**：无需预装——没有 64 位 3.10–3.12 时安装器会自动下载便携版（缓存在 `~/.dsh/calibguard-tools`，可用 `--no-portable-python` 关闭）；
-3. **CG 引擎**：自动下载，或已有可用的 `CG_GUI/`（含 `calibguard/`、`models/`、`.venv`）。
+3. **引擎**：插件自带；模型权重会自动从 npm 镜像下载。也可用 `--from` 指定 CG 发行包，或把 `engineRoot` 指向已有 `CG_GUI/`。
 
 ### 方式 0：桌面端「添加插件」（最省事，推荐）
 
@@ -83,7 +89,7 @@ DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一�
 
 | 填什么 | 示例 | 说明 |
 |---|---|---|
-| **GitHub 仓库地址**（推荐） | `https://github.com/maomitgd2006/DSH_CG` | 自动拉取源码并登记到当前 profile 的 bundle |
+| **GitHub 仓库地址**（推荐） | `https://github.com/maomitgd2006/dsh-CalibGuard` | 自动拉取源码并登记到当前 profile 的 bundle |
 | **本地目录路径** | `<你的插件目录>`（例：`D:\code\dsh-calibguard`） | 已 clone / 解压到本地时用 |
 | **包名** | `dsh-calibguard` | ✅ **已发布到 npm**，直接输包名即可（自动装 npm 上的 latest） |
 
@@ -91,7 +97,7 @@ DSH 桌面版 → 设置 → **添加插件**，输入框里填以下任意一�
 >
 > ```powershell
 > dsh plugin --profile <profile> add dsh-calibguard                                   # npm 包（推荐）
-> dsh plugin --profile <profile> add https://github.com/maomitgd2006/DSH_CG           # GitHub 源码
+> dsh plugin --profile <profile> add https://github.com/maomitgd2006/dsh-CalibGuard           # GitHub 源码
 > dsh plugin --profile <profile> add file:<本包绝对路径>                                # 本地目录
 > ```
 >
@@ -133,7 +139,7 @@ dsh plugin --profile <profile> add dsh-calibguard
 
 ### 方式 C：发行包（离线 / 不想用 npm）
 
-从 [Releases](https://github.com/maomitgd2006/DSH_CG/releases/latest) 下载
+从 [Releases](https://github.com/maomitgd2006/dsh-CalibGuard/releases/latest) 下载
 `dsh-calibguard-<版本>.zip`（约 100 KB，不含 `test/`），解压到一个固定目录，然后按「方式 B」
 把 `name` 指向解压目录下的 `lib/index.js` 即可。
 
@@ -210,11 +216,11 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | 键 | 默认 | 说明 |
 |---|---|---|
 | `enabled` | `true` | 关掉则什么都不注册（临时停用不必删行） |
-| `engineRoot` | `''` | CG_GUI 目录；留空自动取本包**同级**的 `CG_GUI` |
+| `engineRoot` | `''` | 引擎目录；留空自动推导：**npm/桌面端安装**时为 `~/.dsh/calibguard-engine`，源码仓库里为本包同级 `CG_GUI` |
 | `device` | `auto` | 自动做「CUDA 版本 + 算力」双检，低算力显卡回落 CPU |
 | `credentialRef` | `''` | 推荐的云端复核凭据引用名，如 `DEEPSEEK_API_KEY`（交给 DSH 凭据库解析） |
 | `announceToModel` | `true` | 是否把「何时该用 CalibGuard」写进系统提示词 |
-| `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**下载引擎、按需下载便携 Python、安装依赖；设 `false` 则只报错提示手动 `node setup.mjs` |
+| `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**准备引擎（内置代码 + npm 模型分片）、按需下载便携 Python、安装依赖；设 `false` 则只报错提示手动 `node setup.mjs` |
 | `maxFiles` | `20` | 目录展开上限；显式给出/上传的文件不受限 |
 
 ---
@@ -224,7 +230,7 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | 现象 | 处理 |
 |---|---|
 | 侧边栏没有图标 / 面板报 `not found` | 客户端与路由在宿主启动时加载：**重启 DSH** |
-| **首次运行要等十几分钟** | 正常：首次自动下载引擎（467 MB）并安装依赖（1–3 GB）；面板顶部有进度卡片，只需一次 |
+| **首次运行要等十几分钟** | 正常：首次下载模型（约 442 MB，自动镜像回退）并安装依赖（1–3 GB）；面板顶部有进度卡片，只需一次 |
 | 首次审计很慢 | 正常：要加载约 475 MB 权重（之后走常驻进程） |
 | 大文件审计几十秒 | 正常：全文滑窗逐窗推理，见 [docs/performance.md](docs/performance.md) |
 | 灰区全部转人工 | 没配凭据：设 `credentialRef`（推荐）或在 DSH Models 页配置 |
@@ -239,9 +245,10 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 ## 项目结构
 
 ```
-DSH_CG/
+dsh-CalibGuard/
 ├── lib/                 Node 侧：插件入口、引擎管理、工具、路由、共享设置、浏览器面板
 ├── bridge/              Python 桥接：常驻子进程，行式 JSON 协议，复用引擎
+├── engine/              从 CG_GUI 复制来的引擎核心（代码/词表/校准参数，不含 475 MB 权重）
 ├── cordis.patch.yml     组合包 patch（把插件行插进 profile 配置树）
 ├── scripts/             link-dsh（开发期挂包）、bridge-selftest（引擎自检）
 ├── test/                node --test（95 个用例；缺引擎环境时自动 skip）
@@ -263,7 +270,7 @@ DSH_CG/
 
 | 仓库 | 内容 |
 |---|---|
-| **maomitgd2006/DSH_CG**（本仓库） | DSH 插件：工具 / 服务 / 路由 + 浏览器面板 + Python 桥接 |
+| **maomitgd2006/dsh-CalibGuard**（本仓库） | DSH 插件：工具 / 服务 / 路由 + 浏览器面板 + Python 桥接 |
 | [P-436/CG](https://github.com/P-436/CG) | 引擎与基准：`CG_GUI/`（桌面壳 + 引擎 + 模型）、`CG_Bench/`（训练/评测） |
 
 ## 许可证

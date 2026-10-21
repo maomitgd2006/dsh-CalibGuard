@@ -16,7 +16,8 @@
       config:
         # 是否注册工具（false 时不注册任何东西，便于临时停用而不必删行）
         enabled: true
-        # CalibGuard 引擎目录（含 calibguard/ 包与 models/ 的 CG_GUI 目录）；留空=自动推导为包的同级 CG_GUI
+        # 引擎目录（含 calibguard/ 包与 models/ 的目录）；留空=自动推导：npm/桌面端安装为 ~/.dsh/calibguard-engine，
+        # 源码仓库里为本包同级 CG_GUI
         engineRoot: ''
         # Python 解释器；留空=依次尝试 <engineRoot>/.venv、环境变量 DSH_CALIBGUARD_PYTHON、PATH
         pythonPath: ''
