@@ -77,6 +77,15 @@ mirrors, and pip tries Tsinghua → Aliyun → USTC → Tencent → PyPI in orde
 the installer pulls the **CUDA (cu128) build of torch**; otherwise it installs the CPU build (GTX 10 series is
 SM 6.1 and has no kernels in the cu128 wheels). The panel header shows the inference device and the reason.
 
+Manual override (optional): `node setup.mjs --force-cuda` (force the CUDA build, skipping the CUDA/compute
+checks — use at your own risk) or `node setup.mjs --cpu` (force CPU), or the env vars
+`DSH_CALIBGUARD_FORCE_CUDA=1` / `DSH_CALIBGUARD_CPU_ONLY=1`. Switch later with
+`node setup.mjs --reinstall-torch --force-cuda` (or `--cpu`).
+
+> The CPU and CUDA builds of torch **cannot coexist in one venv** (same package name; installing one replaces
+> the other). The CUDA build is a full torch and falls back to CPU when no GPU is available, so coexistence is
+> unnecessary.
+
 **Where to watch progress**: the panel shows a "First run: preparing engine and dependencies" card with
 the current step and the tail of the installer output; host logs show `[calibguard]` lines. The audit
 button stays disabled until it is ready — press "刷新状态 / Refresh" afterwards. Expect **10–20 minutes**
@@ -268,6 +277,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | **Where are audit results saved / how to clear them** | In the engine's `reports/` directory (default `<engineRoot>/reports`): JSON + Markdown per audit. The panel shows the path and has a "clear results" button; AI tools return `report_md_path` / `report_json_path` |
 | **"First audit will load the model" hint shows every time** | Since 0.3.3 it is only shown while the model is not loaded yet; afterwards the button just says "auditing…" and the header shows "model loaded" |
 | **NVIDIA GPU (e.g. RTX 2060) but the engine keeps using CPU** | The installed torch is the CPU build (old installer behavior). Upgrade to ≥0.3.3 (the panel will tell you) and run `node setup.mjs --reinstall-torch` (~2.5 GB) in the plugin directory, then restart DSH |
+| **Want to force the GPU / CPU torch build** | Add `--force-cuda` / `--cpu` at install time (combine with `--reinstall-torch` to replace an existing build); the runtime device is controlled by the plugin config `device` (auto/cpu/cuda); `cuda` requires the CUDA build |
 | A legitimate third-party library is BLOCKed | Minified libraries are full of eval/base64 patterns and the corpus is Python-heavy — known false-positive tendency, see [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Panel returns 401/403 | Browser session isn't authenticated with the host: refresh / sign in again |
 | The AI ignores changed settings | Press Save in the panel; editing fields without saving applies to that run only |

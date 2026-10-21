@@ -70,6 +70,15 @@ GitHub 直连失败会自动换 gh-proxy / ghfast / ghproxy 镜像；pip 依赖�
 **CUDA（cu128）版 torch**；否则装 CPU 版（GTX 10 系算力 6.1，cu128 轮子里没有对应 kernel，只能 CPU）。
 面板顶部会显示「推理设备：cpu/cuda」和定档原因。
 
+手动覆盖（可选）：
+`node setup.mjs --force-cuda`（强制装 CUDA 版，跳过 CUDA/算力检查，风险自负）、
+`node setup.mjs --cpu`（强制 CPU 版），或环境变量 `DSH_CALIBGUARD_FORCE_CUDA=1` /
+`DSH_CALIBGUARD_CPU_ONLY=1`。装完想切换：`node setup.mjs --reinstall-torch --force-cuda` 或
+`--reinstall-torch --cpu`。
+
+> CPU 版与 CUDA 版 torch **不能同时存在于同一个 venv**（同名包会互相覆盖）；
+> 但 CUDA 版 torch 本身就是完整 torch，没有 GPU 时会自动用 CPU，所以不需要共存。
+
 **进度在哪看**：面板顶部会出现「首次运行：正在自动准备引擎与依赖」卡片（含当前步骤与输出尾巴）；
 宿主日志里是 `[calibguard]` 开头的行。准备期间审计按钮不可用，完成后点「刷新状态」即可。
 首次约需 **10–20 分钟**（取决于网速和 pip 源），只需一次。
@@ -253,6 +262,7 @@ AI 能看到完整四档结论与证据；若你说「只审高危文件」，�
 | **审计结果保存在哪 / 想清空** | 保存在引擎 `reports/` 目录（默认 `<engineRoot>/reports`），每次审计生成 JSON + Markdown；面板结果区显示路径并带「清空结果」按钮；AI 工具返回 `report_md_path` / `report_json_path` |
 | **审计时总提示"首次会加载模型"** | 0.3.3 起只在模型尚未加载时提示；加载后按钮只显示「审计中…」，顶部状态显示「模型 已加载」 |
 | **有 NVIDIA 显卡（如 RTX 2060）但一直显示 CPU** | 说明装的是 CPU 版 torch（旧版安装器行为）。升级到 ≥0.3.3 后面板会给出提示；在插件目录运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）装上 CUDA 版即可，之后重启 DSH |
+| **想强制用 GPU / CPU 版 torch** | 安装时加 `--force-cuda` / `--cpu`（配合 `--reinstall-torch` 可覆盖已装版本）；运行时设备由插件配置 `device`（auto/cpu/cuda）决定，`cuda` 需要 CUDA 版 torch |
 | 大文件审计几十秒 | 正常：全文滑窗逐窗推理，见 [docs/performance.md](docs/performance.md) |
 | 灰区全部转人工 | 没配凭据：在面板「凭据名 + API Key」保存，或设 `credentialRef`、或在 DSH Models 页配置 |
 | 正规第三方库被判 BLOCK | 压缩库充满 eval/base64 等特征，模型语料偏 Python 生态 → 属已知误报倾向，见 [docs/troubleshooting.md](docs/troubleshooting.md) |

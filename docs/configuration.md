@@ -30,6 +30,9 @@
 
 > **GPU 定档**：安装器检测到 NVIDIA 且 CUDA ≥ 12.8、算力 ≥ 7.5 时自动装 CUDA（cu128）版 torch，
 > 否则装 CPU 版。已经装成 CPU 版时：在插件目录运行 `node setup.mjs --reinstall-torch`。
+> 手动覆盖：`--force-cuda` / `--cpu`（或环境变量）决定**安装哪个 build**；插件配置 `device`
+> （auto/cpu/cuda）决定**运行时用哪个设备**。CPU 版与 CUDA 版 torch 不能共存于同一个 venv
+>（同名包互斥）；CUDA 版在无 GPU 时也能跑 CPU。
 
 ## 二、参数优先级
 
@@ -70,6 +73,7 @@
 |---|---|
 | `DSH_CALIBGUARD_PYTHON` | 指定桥接进程使用的 Python 解释器（优先于 `<engineRoot>/.venv`） |
 | `DSH_CALIBGUARD_CPU_ONLY` | 设为 `1` 强制使用 CPU 版 torch（跳过 GPU 定档） |
+| `DSH_CALIBGUARD_FORCE_CUDA` | 设为 `1` 强制安装 CUDA 版 torch（跳过 CUDA 版本/算力检查，风险自负） |
 | `DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS` | 大文件并发分段下载的连接数（默认 4；模型/引擎包下载提速） |
 | `DSH_CALIBGUARD_TORCH_INDEX` | CUDA 版 torch 的安装索引（默认 `https://download.pytorch.org/whl/cu128`） |
 | `DSH_CALIBGUARD_PIP_INDEX` | 指定 pip 主索引（默认依次尝试 清华 → 阿里 → 中科大 → 腾讯 → 官方） |

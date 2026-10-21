@@ -123,10 +123,25 @@ function detectGpu() {
   return { hasNvidia: true, gpuName, computeCap, cudaVersion }
 }
 
-/** 是否需要安装 CUDA 版 torch（与 CG_GUI launcher 同款「CUDA 版本 + 算力」双检）。 */
-function decideCudaTorch(gpu) {
-  if (String(process.env.DSH_CALIBGUARD_CPU_ONLY || '') === '1') {
-    return { useCuda: false, reason: 'DSH_CALIBGUARD_CPU_ONLY=1，强制 CPU' }
+/**
+ * 是否需要安装 CUDA 版 torch。
+ * 优先级（高 → 低）：--cpu / DSH_CALIBGUARD_CPU_ONLY=1 ＞ --force-cuda / DSH_CALIBGUARD_FORCE_CUDA=1
+ * ＞ auto（CG_GUI launcher 同款「CUDA 版本 + 算力」双检）。
+ * 说明：CUDA 版 torch 在没有 GPU 时也能正常跑 CPU，所以「强制 CUDA」只是安装时跳过兼容性检查；
+ * 风险：cu128 轮子里没有该显卡算力的 kernel 时，运行期会回落 CPU 或报错（自担）。
+ */
+function decideCudaTorch(gpu, options = {}) {
+  if (options.forceCpu || String(process.env.DSH_CALIBGUARD_CPU_ONLY || '') === '1') {
+    return { useCuda: false, reason: options.forceCpu ? '--cpu 指定' : 'DSH_CALIBGUARD_CPU_ONLY=1，强制 CPU' }
+  }
+  if (options.forceCuda || String(process.env.DSH_CALIBGUARD_FORCE_CUDA || '') === '1') {
+    return {
+      useCuda: true,
+      forced: true,
+      reason: options.forceCuda
+        ? '--force-cuda 显式强制（跳过 CUDA/算力检查，风险自负）'
+        : 'DSH_CALIBGUARD_FORCE_CUDA=1 强制（跳过 CUDA/算力检查，风险自负）',
+    }
   }
   if (!gpu.hasNvidia) return { useCuda: false, reason: '未检测到 NVIDIA 显卡（nvidia-smi 不可用）' }
   if (!gpu.cudaVersion || cmpVersion(gpu.cudaVersion, CUDA_MIN) < 0) {
@@ -311,6 +326,8 @@ function parseArgs(argv) {
     noPortablePython: false,
     forcePortablePython: false,
     reinstallTorch: false,
+    forceCuda: false,
+    forceCpu: false,
     help: false,
   }
   for (let i = 0; i < argv.length; i += 1) {
@@ -334,6 +351,8 @@ function parseArgs(argv) {
       case '--no-portable-python': options.noPortablePython = true; break
       case '--force-portable-python': options.forcePortablePython = true; break
       case '--reinstall-torch': options.reinstallTorch = true; break
+      case '--force-cuda': options.forceCuda = true; break
+      case '--cpu': options.forceCpu = true; break
       default: fail(`未知参数：${arg}（用 --help 查看用法）`)
     }
   }
@@ -360,6 +379,8 @@ function printHelp() {
   --no-portable-python  本机没有 Python 时不自动下载便携版（默认会自动下载）
   --force-portable-python  跳过本机 Python 检测，强制用便携版（测试用）
   --reinstall-torch 重新安装 torch（检测到 NVIDIA 时装 CUDA/cu128 版，约 2.5 GB）
+  --force-cuda      安装时强制选 CUDA 版 torch（跳过 CUDA版本/算力检查，风险自负）
+  --cpu             安装时强制选 CPU 版 torch
   -h, --help        显示本帮助
 
 示例：
@@ -378,7 +399,10 @@ function printHelp() {
     可用 DSH_CALIBGUARD_PIP_INDEX 指定其它索引；
   • 从 npm 安装时引擎默认放在 ~/.dsh/calibguard-engine（可用 --dest 或插件配置 engineRoot 指定）；
   • GPU 自动定档：检测到 NVIDIA 且 CUDA≥12.8、算力≥7.5（如 RTX 20/30/40 系）时
-    自动安装 CUDA（cu128）版 torch；否则用 CPU 版；可用 DSH_CALIBGUARD_CPU_ONLY=1 强制 CPU；
+    自动安装 CUDA（cu128）版 torch；否则用 CPU 版；
+    - 手动覆盖：--force-cuda（强制 GPU 版）/ --cpu（强制 CPU 版），
+      或环境变量 DSH_CALIBGUARD_FORCE_CUDA=1 / DSH_CALIBGUARD_CPU_ONLY=1；
+    - CUDA 版 torch 在无 GPU 时也能跑 CPU，两者**不能同时装在同一个 venv**（同名包互斥）；
   • 大文件（模型/引擎包）默认 4 路并发分段下载，可用 DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS 调整；
   • 装完想换 GPU/CPU 版 torch：node setup.mjs --reinstall-torch。
 `)
@@ -1003,7 +1027,10 @@ async function main() {
     // GPU 定档：有可用 NVIDIA（CUDA≥12.8、算力≥7.5）时先装 CUDA 版 torch，
     // 与 CG_GUI launcher 的口径一致；否则装 CPU 版 torch。
     const gpu = detectGpu()
-    const decision = decideCudaTorch(gpu)
+    const decision = decideCudaTorch(gpu, options)
+    if (decision.forced && !gpu.hasNvidia) {
+      warn('强制 CUDA 但未检测到 NVIDIA 显卡：torch 会安装成功，但运行期仍会回落 CPU。')
+    }
     const gpuLabel = gpu.gpuName ? `（${gpu.gpuName}）` : ''
     log(`GPU 定档：${decision.useCuda ? 'CUDA（cu128）' : 'CPU'} —— ${decision.reason}${gpuLabel}`)
     const existingTorchCuda = installedTorchCuda(python)
@@ -1030,8 +1057,8 @@ async function main() {
     const finalTorchCuda = installedTorchCuda(python)
     log(`torch CUDA：${finalTorchCuda || '无（CPU 版）'}`)
     if (decision.useCuda && !finalTorchCuda) {
-      warn('检测到可用 GPU 但 torch 是 CPU 版：审计仍可运行，只是用 CPU。'
-        + '可重跑：node setup.mjs --reinstall-torch')
+      warn('当前 torch 是 CPU 版：审计仍可运行，只是用 CPU。'
+        + '可重跑：node setup.mjs --reinstall-torch（或 --force-cuda 跳过兼容性检查）')
     }
     log('✓ 依赖安装完成')
   }
