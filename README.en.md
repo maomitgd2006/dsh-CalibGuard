@@ -4,7 +4,7 @@ English | [中文](README.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-110%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-116%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 Plugs the [CalibGuard](https://github.com/P-436/CG) file-security auditing engine into
@@ -17,6 +17,8 @@ and you can also drag files into a sidebar panel for the same audit.
   cloud LLM call (can be disabled);
 - 🧭 **Four verdicts** — allow / suspicious / block / manual review, with evidence and a Markdown report;
 - 🧰 **Three interfaces** — agent tools (`calibguard_audit` audit / `calibguard_status` status / `calibguard_configure` settings) and a browser panel;
+- 🛡️ **Plugin health checks** — when another DSH plugin is installed/updated, CalibGuard scans it and warns
+  (optional periodic scans or off; never scans itself);
 - ⚙️ **One set of settings** — saved in the panel, used by the AI too.
 
 > This is the **DSH plugin** for [CG](https://github.com/P-436/CG). To make the plugin work out of the box,
@@ -255,7 +257,22 @@ effective immediately):
   whitelist, never credential values). If a key is needed, ask the user to fill it in the panel —
   never ask for the key in chat.
 
-### 5) Tool parameters (per-call, advanced)
+### 5) Other DSH plugin scanning (automatic health check)
+
+CalibGuard watches the profile's plugin list (`dsh.profile.bundles`):
+
+- when **another plugin is installed or updated**, it scans it and warns you (removed plugins are ignored);
+- optional **periodic scans** (weekly / monthly / quarterly / half-yearly), or turn scanning off;
+- **never scans itself** (`dsh-calibguard` ships models/tokenizer data and is the most sensitive package in
+  the profile), and skips `@deepseek-ai/*` core packages by default;
+- up to 100 files per plugin (adjustable 1–500 in the panel), results summarized per plugin
+  (block / manual_review / suspicious / allow);
+- risky plugins are logged as `[calibguard] 插件提醒：name@version → …` and shown in the panel's
+  "Other DSH plugin scan" card; state lives in `$DSH_HOME/calibguard-plugin-scan.json`;
+- panel controls: scan-on-update toggle, period, per-plugin file cap; the AI can change the same three
+  settings via `calibguard_configure`.
+
+### 6) Tool parameters (per-call, advanced)
 
 | Parameter | Description |
 |---|---|
@@ -287,6 +304,9 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | `announceToModel` | `true` | Add "when to use CalibGuard" to the system prompt |
 | `autoSetup` | `true` | On first run, automatically download the engine, a portable Python when needed, and install deps; set `false` to only fail with instructions |
 | `maxFiles` | `20` | Directory recursion cap; explicitly given/uploaded files are not capped |
+| `scanPluginsOnUpdate` | `true` | Auto-scan other DSH plugins on install/update (never scans itself, skips `@deepseek-ai/*`) |
+| `pluginScanInterval` | `'monthly'` | Periodic scan interval: `off` / `weekly` / `monthly` / `quarterly` / `halfyearly` |
+| `pluginScanMaxFiles` | `100` | Max files scanned per plugin (1–500) |
 
 ---
 
@@ -299,6 +319,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | First audit is slow | Normal: ~475 MB of weights are loaded once (then the process stays resident) |
 | Big file takes tens of seconds | Normal: full-text sliding-window inference; see [docs/performance.md](docs/performance.md) |
 | Gray zone always goes to manual review | No credential configured: save "credential name + API key" in the panel, or set `credentialRef`, or configure it in DSH Models |
+| **Will it warn me about other DSH plugins / how to disable** | Enabled by default: other plugins are scanned on install/update and risky ones are reported; the panel lets you switch to periodic scans or turn it off; never scans itself or `@deepseek-ai/*`; state file `$DSH_HOME/calibguard-plugin-scan.json` |
 | **Don't know how to change the settings** | Just ask the agent: "set the thresholds / cloud review / delivery mode to …" — it calls `calibguard_configure` and the panel reflects it. API keys must be entered by the user in the panel; the tool never reads or writes them |
 | **Panel says "credentialRef required" when saving the API key** | Upgrade to ≥ **0.3.3**: the panel has a "credential name" field (defaults to `DEEPSEEK_API_KEY`) and remembers it; older versions require `credentialRef` in the plugin config |
 | **"This environment does not support writing the DSH credential store"** | Since 0.3.6 the key automatically falls back to the local `~/.dsh/calibguard-credentials.json` (0600) and the panel shows the storage location; you can also configure it in the DSH Models page, or use plugin config `llmApiKey` (not recommended) |
@@ -323,7 +344,7 @@ dsh-CalibGuard/
 ├── engine/              Bundled engine core copied from CG_GUI (code / tokenizer / calibration, no weights)
 ├── cordis.patch.yml     Bundle patch (inserts the loader row)
 ├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
-├── test/                node --test (110 cases; auto-skip when the engine env is missing)
+├── test/                node --test (116 cases; auto-skip when the engine env is missing)
 ├── .github/workflows/   publish.yml: npm trusted publishing (OIDC, optional)
 └── docs/                configuration, performance, troubleshooting, plugin contract, design notes
 ```

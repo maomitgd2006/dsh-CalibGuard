@@ -4,7 +4,7 @@
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-110%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-116%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 把 [CalibGuard](https://github.com/P-436/CG) 的文件安全审计引擎接进 **DeepSeek Harness（DSH）**：
@@ -14,6 +14,7 @@
 - ☁️ **灰区才上云**：只有本地拿不准的文件才发一次云端复核（可关闭）；
 - 🧭 **四档结论**：放行 / 可疑 / 拦截 / 转人工，附证据与 Markdown 报告；
 - 🧰 **三种用法**：AI 工具（`calibguard_audit` 审计 / `calibguard_status` 状态 / `calibguard_configure` 改设置）+ 浏览器面板；
+- 🛡️ **插件体检**：安装/更新**别的 DSH 插件**时自动扫一遍并提醒（可设周期巡检或关闭，不扫自己）；
 - ⚙️ **一套设置**：面板里保存的阈值与送审口径，AI 调用同样生效。
 
 > 本仓库是 [CG](https://github.com/P-436/CG) 的 **DSH 插件**。为了让插件开箱即用，运行所需的引擎核心
@@ -239,7 +240,19 @@ AI 会调用 `calibguard_configure` 写入**共享设置**（与面板同一份�
 - **安全限制**：该工具**不能读取、也不能写入 API Key**（返回值里永远只有白名单设置项，不含任何凭据值）。
   需要配置 Key 时，让 AI 提醒你在面板「设置 → API Key」里填，**不要把 Key 发在对话里**。
 
-### 5) 工具参数（按次覆盖，写给进阶用户）
+### 5) 其他 DSH 插件扫描（装插件时自动体检）
+
+CalibGuard 会盯着当前 profile 的插件列表（`dsh.profile.bundles`）：
+
+- **新装/升级别的插件时**自动扫一遍并给出提醒（已删除的插件忽略）；
+- 也可设**周期巡检**（每周 / 每月 / 每季度 / 每半年），或**完全关闭**；
+- **不扫自己**（`dsh-calibguard` 自带模型/词表，自身就是高敏感大包），默认也跳过 `@deepseek-ai/*` 官方核心包；
+- 每个插件默认最多扫 100 个文件（面板可调 1–500），结果按插件汇总（拦截/转人工/可疑/放行）；
+- 有风险时宿主日志会打 `[calibguard] 插件提醒：xxx@1.2.3 → 拦截 …`，面板「其他 DSH 插件扫描」卡片展示最近结果；
+- 结果文件：`$DSH_HOME/calibguard-plugin-scan.json`；
+- 面板可改：更新时自动扫描（开/关）、周期频率、单插件文件上限；也可让 AI 用 `calibguard_configure` 改这三项。
+
+### 6) 工具参数（按次覆盖，写给进阶用户）
 
 | 参数 | 说明 |
 |---|---|
@@ -271,6 +284,9 @@ AI 会调用 `calibguard_configure` 写入**共享设置**（与面板同一份�
 | `announceToModel` | `true` | 是否把「何时该用 CalibGuard」写进系统提示词 |
 | `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**准备引擎（内置代码 + npm 模型分片）、按需下载便携 Python、安装依赖；设 `false` 则只报错提示手动 `node setup.mjs` |
 | `maxFiles` | `20` | 目录展开上限；显式给出/上传的文件不受限 |
+| `scanPluginsOnUpdate` | `true` | 其他 DSH 插件新装/升级时自动扫描（不扫自己与 `@deepseek-ai/*`） |
+| `pluginScanInterval` | `'monthly'` | 其他插件周期巡检：`off` / `weekly` / `monthly` / `quarterly` / `halfyearly` |
+| `pluginScanMaxFiles` | `100` | 单个插件一次最多扫描的文件数（1–500） |
 
 ---
 
@@ -281,6 +297,7 @@ AI 会调用 `calibguard_configure` 写入**共享设置**（与面板同一份�
 | 侧边栏没有图标 / 面板报 `not found` | 客户端与路由在宿主启动时加载：**重启 DSH** |
 | **首次运行要等十几分钟** | 正常：首次下载模型（约 442 MB，自动镜像回退）并安装依赖（1–3 GB）；面板顶部有进度卡片，只需一次 |
 | 首次审计很慢 | 正常：要加载约 475 MB 权重（之后走常驻进程） |
+| **装了别的 DSH 插件会提醒吗 / 怎么关** | 默认开启：新装/升级插件时自动扫描并提醒，面板「其他 DSH 插件扫描」可改为周期巡检或关闭；不扫自己与 `@deepseek-ai/*`；结果在 `$DSH_HOME/calibguard-plugin-scan.json` |
 | **不知道怎么改设置** | 直接让 AI 改：说"把阈值/云端复核/送审方式改成…"，AI 会调 `calibguard_configure` 写入共享设置（面板同步生效）；涉及 API Key 时必须自己在面板填，AI 不会读也不会写 Key |
 | **面板保存 API Key 提示"需要 credentialRef"** | 升级到 ≥ **0.3.3**：面板「凭据名」可直接填写并记住（默认预填 `DEEPSEEK_API_KEY`）；旧版本请把 `credentialRef` 写进插件配置 |
 | **提示"当前环境不支持写入 DSH 凭据库"** | ≥0.3.6 起会自动回退到本机凭据文件 `~/.dsh/calibguard-credentials.json`（0600），面板会显示存储位置；想改回凭据库时在 DSH Models 页配置即可。也可用插件配置 `llmApiKey`（不推荐） |
@@ -307,7 +324,7 @@ dsh-CalibGuard/
 ├── engine/              从 CG_GUI 复制来的引擎核心（代码/词表/校准参数，不含 475 MB 权重）
 ├── cordis.patch.yml     组合包 patch（把插件行插进 profile 配置树）
 ├── scripts/             link-dsh（开发期挂包）、bridge-selftest（引擎自检）
-├── test/                node --test（110 个用例；缺引擎环境时自动 skip）
+├── test/                node --test（116 个用例；缺引擎环境时自动 skip）
 ├── .github/workflows/   publish.yml：npm 可信发布（OIDC，可选）
 └── docs/                配置全表、性能、排错、插件契约、实现决策
 ```

@@ -44,6 +44,11 @@
         # *KEY*/*PASSWORD*/*SECRET*/*TOKEN* 与 DSH_* 的变量。
         # 留空=优先用 DSH 自己的 scrubbedParentEnv，取不到时用内置启发式。
         sensitiveEnvPattern: ''
+        # 其他 DSH 插件扫描（安装/更新插件时自动体检；不扫自己与 @deepseek-ai/*）
+        # scanPluginsOnUpdate: true
+        # pluginScanInterval: monthly   # off / weekly / monthly / quarterly / halfyearly
+        # pluginScanMaxFiles: 100       # 单个插件最多扫描的文件数（1~500）
+
         # 以下留空/不写即跟随引擎默认值或 gui-settings.json
         # allowThreshold: 0.15
         # blockThreshold: 0.85

@@ -131,12 +131,13 @@ test('effect 作用域覆盖全部清理：工具撤销 + 桥接停机', async (
   const { ctx, registered, effects } = fakeContext()
   apply(ctx, {})
   // 三个工具的撤销 disposer + 提示词片段 disposer + 停桥接 disposer
-  assert.equal(effects.length, 5)
+  assert.equal(effects.length, 6)
   assert.deepEqual(
     effects.map((item) => item.label).sort(),
     [
       'calibguard:prompt-section',
       'calibguard:stop-bridge',
+      'calibguard:stop-plugin-scan',
       'calibguard:unregister(calibguard_audit)',
       'calibguard:unregister(calibguard_configure)',
       'calibguard:unregister(calibguard_status)',

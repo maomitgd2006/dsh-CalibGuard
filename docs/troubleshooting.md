@@ -13,6 +13,8 @@
 | **面板保存 API Key 报「需要 credentialRef」** | 升级到 ≥0.3.3：面板「凭据名」直接填（如 `DEEPSEEK_API_KEY`）并保存，会记进共享设置；旧版本只能把 `credentialRef` 写进插件配置 |
 | **审计结果在哪里 / 怎么清空** | 引擎 `reports/` 目录（默认 `<engineRoot>/reports`）：每次审计生成 JSON + Markdown；面板结果区显示路径并有「清空结果」，工具返回 `report_md_path` / `report_json_path` |
 | **每次审计都提示"首次会加载模型"** | 0.3.3 起仅在模型未加载时提示；加载后不再出现，顶部状态显示「模型 已加载」 |
+| **装了新插件没有收到扫描提醒** | 默认在插件列表变化后 1 分钟内检测并扫描；确认面板「其他 DSH 插件扫描」里"更新时自动扫描"未关闭，且引擎环境已就绪（首次装环境期间会跳过）。也可点「立即扫描全部」。结果在 `$DSH_HOME/calibguard-plugin-scan.json` |
+| **不想扫描其他插件** | 面板把"更新时自动扫描"取消勾选，并把周期扫描设为「关闭」；或在插件配置里设 `scanPluginsOnUpdate: false`、`pluginScanInterval: off` |
 | **有 NVIDIA 显卡但引擎显示 CPU** | 装的是 CPU 版 torch。升级到 ≥0.3.3（面板顶部会提示），然后在插件目录运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）装 CUDA 版；装完重启 DSH。`DSH_CALIBGUARD_CPU_ONLY=1` 可反向强制 CPU |
 | **已经装了 CPU 版 torch，想换成 GPU 版** | 升级到 ≥0.3.5：面板顶部点「一键重装 GPU 版 torch（约 2.5 GB）」（先卸载再装，完成自动重启桥接）；或命令行 `node "<插件目录>/setup.mjs" --reinstall-torch --force-cuda` |
 | **想强制装 GPU / CPU 版 torch** | 安装时加 `--force-cuda` / `--cpu`（可配合 `--reinstall-torch` 覆盖已装版本）；CPU 版与 CUDA 版不能共存于同一 venv，CUDA 版在无 GPU 时会自动回落 CPU |
