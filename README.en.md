@@ -269,6 +269,9 @@ effective immediately):
 | `truncate_chars` / `window_chars` / `window_overlap` | Cloud-delivery chunking |
 | `window_stride` | Model-side sliding-window stride (1–511, default 256; 510 speeds up big files) |
 
+> There is also `calibguard_configure` for **persistent** shared settings (thresholds / cloud review /
+> delivery mode / directory limit / credential name), shared with the panel; it never reads or writes the API key.
+
 ---
 
 ## Configuration
