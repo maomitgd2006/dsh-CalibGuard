@@ -16,8 +16,10 @@
 - 🧰 **两种用法**：AI 工具调用（`calibguard_audit` / `calibguard_status`）+ 浏览器面板；
 - ⚙️ **一套设置**：面板里保存的阈值与送审口径，AI 调用同样生效。
 
-> 本仓库只是 **DSH 插件**；审计引擎本体在 [CG](https://github.com/P-436/CG) 仓库的 `CG_GUI/`，
-> 本仓库不复制、不修改它，通过常驻 Python 子进程调用。
+> 本仓库是 [CG](https://github.com/P-436/CG) 的 **DSH 插件**。为了让插件开箱即用，运行所需的引擎核心
+>（`calibguard/`、`audit_service.py`、词表与校准参数）已**复制到本仓库 [`engine/`](engine/README.md)**
+>（只复制、不改逻辑，同步方法见该目录 README）；模型权重（475 MB）由本仓库 Release 资产分发；
+> 运行时通过常驻 Python 子进程调用引擎。
 
 ---
 

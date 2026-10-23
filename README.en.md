@@ -19,9 +19,11 @@ and you can also drag files into a sidebar panel for the same audit.
 - 🧰 **Two interfaces** — agent tools (`calibguard_audit` / `calibguard_status`) and a browser panel;
 - ⚙️ **One set of settings** — saved in the panel, used by the AI too.
 
-> This repository is only the **DSH plugin**. The auditing engine lives in the
-> [CG](https://github.com/P-436/CG) repository under `CG_GUI/`; it is neither copied nor modified here —
-> the plugin runs it in a persistent Python child process.
+> This is the **DSH plugin** for [CG](https://github.com/P-436/CG). To make the plugin work out of the box,
+> the engine core needed at runtime (`calibguard/`, `audit_service.py`, tokenizer files and calibration
+> parameters) is **copied into this repository under [`engine/`](engine/README.md)** (copied as-is, logic not
+> modified; see that folder's README for how to re-sync). The 475 MB model weights are distributed as a
+> release asset of this repository; at runtime the plugin runs the engine in a persistent Python child process.
 
 ---
 
