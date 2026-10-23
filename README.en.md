@@ -4,7 +4,7 @@ English | [中文](README.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-105%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-110%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 Plugs the [CalibGuard](https://github.com/P-436/CG) file-security auditing engine into
@@ -16,7 +16,7 @@ and you can also drag files into a sidebar panel for the same audit.
 - ☁️ **Cloud review only for the gray zone** — only files the local model is unsure about trigger one
   cloud LLM call (can be disabled);
 - 🧭 **Four verdicts** — allow / suspicious / block / manual review, with evidence and a Markdown report;
-- 🧰 **Two interfaces** — agent tools (`calibguard_audit` / `calibguard_status`) and a browser panel;
+- 🧰 **Three interfaces** — agent tools (`calibguard_audit` audit / `calibguard_status` status / `calibguard_configure` settings) and a browser panel;
 - ⚙️ **One set of settings** — saved in the panel, used by the AI too.
 
 > This is the **DSH plugin** for [CG](https://github.com/P-436/CG). To make the plugin work out of the box,
@@ -239,7 +239,23 @@ After pressing Save:
   (default `<engineRoot>/reports`, `engineRoot` defaults to `~/.dsh/calibguard-engine`). The panel shows
   that path, has a "clear results" button, and each item links to its Markdown report.
 
-### 4) Tool parameters (per-call, advanced)
+### 4) Let the agent change settings (`calibguard_configure`)
+
+If the user does not know where to change something — or wants the agent to apply recommended values — just say:
+
+> "set the allow threshold to 0.1 and block to 0.95" / "turn on cloud review with deepseek-chat" / "cap directory audits at 50 files" / "reset to defaults"
+
+The agent calls `calibguard_configure`, which writes the **shared settings** (the same ones the panel saves;
+effective immediately):
+
+- editable: gray-zone thresholds, cloud-review switch, base URL / model name, content source, delivery mode,
+  truncate/window sizes, directory `max_files`, and the credential **name**;
+- `reset: true` behaves like the panel "reset"; passing `null` for one key restores that key's default;
+- **security**: this tool can **never read or write an API key** (the result only contains the settings
+  whitelist, never credential values). If a key is needed, ask the user to fill it in the panel —
+  never ask for the key in chat.
+
+### 5) Tool parameters (per-call, advanced)
 
 | Parameter | Description |
 |---|---|
@@ -280,6 +296,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | First audit is slow | Normal: ~475 MB of weights are loaded once (then the process stays resident) |
 | Big file takes tens of seconds | Normal: full-text sliding-window inference; see [docs/performance.md](docs/performance.md) |
 | Gray zone always goes to manual review | No credential configured: save "credential name + API key" in the panel, or set `credentialRef`, or configure it in DSH Models |
+| **Don't know how to change the settings** | Just ask the agent: "set the thresholds / cloud review / delivery mode to …" — it calls `calibguard_configure` and the panel reflects it. API keys must be entered by the user in the panel; the tool never reads or writes them |
 | **Panel says "credentialRef required" when saving the API key** | Upgrade to ≥ **0.3.3**: the panel has a "credential name" field (defaults to `DEEPSEEK_API_KEY`) and remembers it; older versions require `credentialRef` in the plugin config |
 | **"This environment does not support writing the DSH credential store"** | Since 0.3.6 the key automatically falls back to the local `~/.dsh/calibguard-credentials.json` (0600) and the panel shows the storage location; you can also configure it in the DSH Models page, or use plugin config `llmApiKey` (not recommended) |
 | **Where are audit results saved / how to clear them** | In the engine's `reports/` directory (default `<engineRoot>/reports`): JSON + Markdown per audit. The panel shows the path and has a "clear results" button; AI tools return `report_md_path` / `report_json_path` |
@@ -303,7 +320,7 @@ dsh-CalibGuard/
 ├── engine/              Bundled engine core copied from CG_GUI (code / tokenizer / calibration, no weights)
 ├── cordis.patch.yml     Bundle patch (inserts the loader row)
 ├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
-├── test/                node --test (105 cases; auto-skip when the engine env is missing)
+├── test/                node --test (110 cases; auto-skip when the engine env is missing)
 ├── .github/workflows/   publish.yml: npm trusted publishing (OIDC, optional)
 └── docs/                configuration, performance, troubleshooting, plugin contract, design notes
 ```

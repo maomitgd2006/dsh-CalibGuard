@@ -39,6 +39,15 @@ function fakeEngine(overrides = {}) {
       calls.push({ kind: 'inspect' })
       return overrides.status ?? sampleStatus()
     },
+    settingsView: () => ({ ...(overrides.settings ?? {}) }),
+    saveSharedSettings: (raw) => {
+      calls.push({ kind: 'saveSettings', raw })
+      return overrides.savedSettings ?? { ...raw }
+    },
+    resetSharedSettings: () => {
+      calls.push({ kind: 'resetSettings' })
+      return {}
+    },
   }
 }
 
@@ -112,9 +121,9 @@ function sampleStatus(overrides = {}) {
 
 const config = normalizeConfig(undefined)
 
-test('注册两个工具，名称与必填参数正确', () => {
+test('注册三个工具，名称与必填参数正确', () => {
   const tools = buildTools({ engine: fakeEngine(), config })
-  assert.equal(tools.length, 2)
+  assert.equal(tools.length, 3)
   const [audit, status] = tools
   assert.equal(audit.name, 'calibguard_audit')
   assert.equal(status.name, 'calibguard_status')
@@ -247,7 +256,7 @@ test('defineTool 注入生效（用于获得 DSH 侧定义期校验）', () => {
   const seen = []
   const define = (definition) => { seen.push(definition.name); return definition }
   buildTools({ engine: fakeEngine(), config, define })
-  assert.deepEqual(seen, ['calibguard_audit', 'calibguard_status'])
+  assert.deepEqual(seen, ['calibguard_audit', 'calibguard_status', 'calibguard_configure'])
 })
 
 // ============================== 调用级参数覆盖（阈值/滑窗/截断） ==============================
@@ -339,4 +348,69 @@ test('render 摘要里带出本次送审口径', () => {
   assert.match(blocks[0].text, /送审 truncate\/1234字/)
   assert.match(blocks[0].text, /内容源 raw/)
   assert.match(blocks[0].text, /滑窗步长 512/)
+})
+
+
+test('calibguard_configure 注册且参数/输出 schema 正确', () => {
+  const engine = fakeEngine()
+  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  assert.deepEqual(tools.map((tool) => tool.name), ['calibguard_audit', 'calibguard_status', 'calibguard_configure'])
+  const configure = tools.find((tool) => tool.name === 'calibguard_configure')
+  assert.ok(configure.parameters.allow_threshold)
+  assert.ok(configure.parameters.reset)
+  assert.equal(configure.output.schema.properties.settings.type, 'json')
+})
+
+test('calibguard_configure 保存共享设置（合并现有值、可恢复默认）', async () => {
+  const engine = fakeEngine({ settings: { llmEnabled: false, maxFiles: 10 } })
+  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const configure = tools.find((tool) => tool.name === 'calibguard_configure')
+  const result = await configure.execute({ allow_threshold: 0.2, block_threshold: 0.9, max_files: 30 })
+  assert.equal(result.ok, true)
+  assert.deepEqual(engine.calls.at(-1).kind, 'saveSettings')
+  assert.deepEqual(engine.calls.at(-1).raw, {
+    llmEnabled: false,
+    maxFiles: 30,
+    allowThreshold: 0.2,
+    blockThreshold: 0.9,
+  })
+  assert.ok(result.changed.some((item) => item.includes('maxFiles=30')))
+  assert.ok(result.settings && result.settings.allowThreshold === 0.2)
+
+  // 传 null = 恢复该键为默认（从共享设置里删除）
+  const cleared = await configure.execute({ max_files: null })
+  assert.equal(engine.calls.at(-1).raw.maxFiles, undefined)
+  assert.equal(cleared.settings.maxFiles, undefined)
+})
+
+test('calibguard_configure 拒绝读取/写入 API Key', async () => {
+  const engine = fakeEngine()
+  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const configure = tools.find((tool) => tool.name === 'calibguard_configure')
+  await assert.rejects(() => configure.execute({ llm_api_key: 'sk-secret' }), /不读写 API Key/)
+  await assert.rejects(() => configure.execute({ apiKey: 'sk-secret' }), /不读写 API Key/)
+  // 没有任何写入发生
+  assert.equal(engine.calls.some((call) => call.kind === 'saveSettings'), false)
+})
+
+test('calibguard_configure reset 清空共享设置', async () => {
+  const engine = fakeEngine({ settings: { allowThreshold: 0.1 } })
+  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const configure = tools.find((tool) => tool.name === 'calibguard_configure')
+  const result = await configure.execute({ reset: true })
+  assert.equal(result.ok, true)
+  assert.deepEqual(result.changed, ['reset'])
+  assert.deepEqual(engine.calls.at(-1), { kind: 'resetSettings' })
+  assert.equal(Object.keys(result.settings).length, 0)
+})
+
+test('calibguard_configure 输出永远不含 API Key（防泄漏兜底）', async () => {
+  // 即使底层设置意外混入键值，sanitize 也会剔除
+  const engine = fakeEngine({ settings: { llmEnabled: true, llmApiKey: 'sk-should-not-leak' } })
+  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const configure = tools.find((tool) => tool.name === 'calibguard_configure')
+  const result = await configure.execute({ llm_enabled: true })
+  const text = JSON.stringify(result)
+  assert.equal(text.includes('sk-should-not-leak'), false)
+  assert.equal(text.includes('llmApiKey'), false)
 })

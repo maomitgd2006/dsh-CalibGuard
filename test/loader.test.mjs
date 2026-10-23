@@ -38,7 +38,7 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-test('真 cordis 树：提供 tools 服务后激活并注册两个工具', { skip }, async () => {
+test('真 cordis 树：提供 tools 服务后激活并注册三个工具', { skip }, async () => {
   const registered = []
   const root = new Context()
   const pluginObject = { name: plugin.name, inject: plugin.inject, Config: plugin.Config, apply: plugin.apply }
@@ -63,8 +63,8 @@ test('真 cordis 树：提供 tools 服务后激活并注册两个工具', { ski
   await sleep(300)
   assert.deepEqual(
     registered.map((item) => item.name).sort(),
-    ['calibguard_audit', 'calibguard_status'],
-    'tools 服务就绪后应注册两个工具',
+    ['calibguard_audit', 'calibguard_configure', 'calibguard_status'],
+    'tools 服务就绪后应注册三个工具',
   )
   assert.equal(typeof root.calibguard?.audit, 'function', 'ctx.provide 的 calibguard 服务应可从上下文读取')
 

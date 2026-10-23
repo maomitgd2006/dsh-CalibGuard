@@ -76,10 +76,10 @@ test('导出形状符合 cordis 插件约定', () => {
   }
 })
 
-test('apply 注册两个工具并暴露 calibguard 服务', () => {
+test('apply 注册三个工具并暴露 calibguard 服务', () => {
   const { ctx, registered, provided, sections } = fakeContext()
   apply(ctx, { announceToModel: true })
-  assert.deepEqual(registered.map((item) => item.name).sort(), ['calibguard_audit', 'calibguard_status'])
+  assert.deepEqual(registered.map((item) => item.name).sort(), ['calibguard_audit', 'calibguard_configure', 'calibguard_status'])
   assert.equal(provided.length, 1)
   assert.equal(provided[0].serviceName, 'calibguard')
   for (const method of ['inspect', 'audit', 'bridgeOptions', 'diagnostics', 'dispose']) {
@@ -103,13 +103,13 @@ test('announceToModel=false 时不注册提示词片段', () => {
   const { ctx, sections, registered } = fakeContext()
   apply(ctx, { announceToModel: false })
   assert.equal(sections.length, 0)
-  assert.equal(registered.length, 2)
+  assert.equal(registered.length, 3)
 })
 
 test('缺少 systemPrompt 服务时只警告，不影响工具注册', () => {
   const { ctx, registered, warnings } = fakeContext({ withSystemPrompt: false })
   apply(ctx, { announceToModel: true })
-  assert.equal(registered.length, 2)
+  assert.equal(registered.length, 3)
   assert.equal(warnings.length, 0)
 })
 
@@ -130,14 +130,15 @@ test('非法配置在 apply 阶段抛出（不会带病注册）', () => {
 test('effect 作用域覆盖全部清理：工具撤销 + 桥接停机', async () => {
   const { ctx, registered, effects } = fakeContext()
   apply(ctx, {})
-  // 两个工具的撤销 disposer + 提示词片段 disposer + 停桥接 disposer
-  assert.equal(effects.length, 4)
+  // 三个工具的撤销 disposer + 提示词片段 disposer + 停桥接 disposer
+  assert.equal(effects.length, 5)
   assert.deepEqual(
     effects.map((item) => item.label).sort(),
     [
       'calibguard:prompt-section',
       'calibguard:stop-bridge',
       'calibguard:unregister(calibguard_audit)',
+      'calibguard:unregister(calibguard_configure)',
       'calibguard:unregister(calibguard_status)',
     ],
   )

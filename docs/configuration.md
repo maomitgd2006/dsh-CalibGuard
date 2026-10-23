@@ -65,7 +65,7 @@
 |---|---|
 | 文件 | `$DSH_HOME/calibguard-settings.json`（默认 `~/.dsh`，**不写进仓库**；可用 `settingsPath` 覆盖） |
 | 内容 | 云端复核开关、Base URL、模型名、送审内容、投递方式、截断/滑窗大小与重叠、灰区上下限、目录上限、**凭据名 `credentialRef`**（**不含密钥本身、不含模型侧步长**） |
-| 写入 | 面板「保存」→ `PUT /api/calibguard/settings`；原子写，非法值不落盘（校验口径与 CG_GUI 一致） |
+| 写入 | 面板「保存」→ `PUT /api/calibguard/settings`；或让 AI 调 `calibguard_configure`（同一份设置，**不读写 API Key/凭据值**）；原子写，非法值不落盘（校验口径与 CG_GUI 一致） |
 | 读取 | 面板加载时回填；AI 每次调用时由引擎合并，**改完立即生效、无需重启** |
 | 重置 | 面板「重置」→ 清空为「跟随插件配置默认值」 |
 | API Key | 面板「凭据名 + API Key」→ `PUT /api/calibguard/credential` → 值写入 DSH 凭据库（不落设置文件），名字记入共享设置 `credentialRef`（便于下次启动找到） |
