@@ -63,8 +63,7 @@ function makeManager(home, { audit, settings = {}, config = {} } = {}) {
   }
   const settingsStore = { get: () => ({ ...settings }) }
   const configFull = {
-    scanPluginsOnUpdate: true,
-    pluginScanInterval: 'monthly',
+    pluginScanMode: 'update',
     pluginScanMaxFiles: 100,
     ...config,
   }
@@ -157,17 +156,39 @@ test('scanNow 汇总 worst 判定并打风险日志', async () => {
   }
 })
 
-test('设置合并：面板设置优先于插件配置；非法间隔回退 monthly', () => {
+test('设置合并：面板设置优先于插件配置；非法 mode 回退默认', () => {
   const home = makeHome()
   try {
     const { manager } = makeManager(home, {
-      settings: { scanPluginsOnUpdate: false, pluginScanInterval: 'off', pluginScanMaxFiles: 7 },
+      settings: { pluginScanMode: 'off', pluginScanMaxFiles: 7 },
     })
-    assert.deepEqual(manager.options(), { onUpdate: false, interval: 'off', maxFiles: 7 })
+    assert.deepEqual(manager.options(), { mode: 'off', enabled: false, maxFiles: 7 })
     const { manager: fallback } = makeManager(home, {
-      settings: { pluginScanInterval: 'every-day' },
+      settings: { pluginScanMode: 'every-day' },
     })
-    assert.equal(fallback.options().interval, 'monthly')
+    assert.equal(fallback.options().mode, 'update')
+    const { manager: legacy } = makeManager(home, {
+      settings: { scanPluginsOnUpdate: true, pluginScanInterval: 'weekly' },
+      config: { pluginScanMode: undefined },
+    })
+    assert.equal(legacy.options().mode, 'weekly')
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('周期模式：到期后 tick 会全量扫描', async () => {
+  const home = makeHome()
+  try {
+    writeProfile(home, ['p1'], [{ name: 'p1', version: '1.0.0' }])
+    const audit = fakeAudit()
+    const { manager } = makeManager(home, { audit, config: { pluginScanMode: 'monthly' } })
+    await manager.tick() // 基线
+    manager.state.lastScanAt = Date.now() - 40 * 24 * 60 * 60 * 1000
+    manager.state.known = manager.state.known ?? []
+    await manager.tick()
+    assert.equal(audit.calls.length, 1)
+    assert.equal(manager.snapshot().lastMode, 'periodic')
   } finally {
     rmSync(home, { recursive: true, force: true })
   }

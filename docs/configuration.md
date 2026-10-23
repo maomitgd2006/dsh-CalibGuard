@@ -14,9 +14,9 @@
 | `announceToModel` | `true` | 是否把「何时该用 CalibGuard」写进系统提示词 |
 | `autoSetup` | `true` | 首次运行缺 `.venv` 时**自动**准备引擎（复制内置 `engine/` + 从 npm 镜像下载模型分片约 476 MB，缓存 `~/.dsh/calibguard-tools/model-cache`）、按需下载便携 Python 3.10.8、安装依赖（1–3 GB）；面板显示进度。设 `false` 则只报错并提示手动 `node setup.mjs` |
 | `maxFiles` | `20` | **目录展开上限**（1–200）：只限制"给一个目录时递归展开多少个文件"；显式给出/上传的文件全部审计 |
-| `scanPluginsOnUpdate` | `true` | 其他 DSH 插件新装/升级时自动扫描并提醒（跳过自己与 `@deepseek-ai/*`） |
-| `pluginScanInterval` | `'monthly'` | 其他插件周期扫描：`off` / `weekly` / `monthly` / `quarterly` / `halfyearly` |
+| `pluginScanMode` | `'update'` | 其他 DSH 插件扫描频率：`off` / `update`（插件列表更新时）/ `weekly` / `monthly` / `quarterly` / `halfyearly` |
 | `pluginScanMaxFiles` | `100` | 单个插件一次最多扫描的文件数（1–500） |
+| `selfUpdateCheck` | `'startup'` | 本插件新版本检查频率：`off` / `startup` / `daily` / `weekly`（只提示，不静默升级） |
 | `auditTimeoutMs` | `600000` | 单次审计超时（毫秒） |
 | `idleShutdownMs` | `600000` | 空闲多久回收桥接进程（`0`=常驻不回收） |
 | `reportDir` | `''` | 报告目录；留空=引擎默认 `<engineRoot>/reports` |
@@ -67,7 +67,7 @@
 | 项 | 说明 |
 |---|---|
 | 文件 | `$DSH_HOME/calibguard-settings.json`（默认 `~/.dsh`，**不写进仓库**；可用 `settingsPath` 覆盖） |
-| 内容 | 云端复核开关、Base URL、模型名、送审内容、投递方式、截断/滑窗大小与重叠、灰区上下限、目录上限、**凭据名 `credentialRef`**、其他插件扫描选项（`scanPluginsOnUpdate`/`pluginScanInterval`/`pluginScanMaxFiles`）（**不含密钥本身、不含模型侧步长**） |
+| 内容 | 云端复核开关、Base URL、模型名、送审内容、投递方式、截断/滑窗大小与重叠、灰区上下限、目录上限、**凭据名 `credentialRef`**、其他插件扫描选项（`pluginScanMode`/`pluginScanMaxFiles`）与自更新检查（`selfUpdateCheck`）（**不含密钥本身、不含模型侧步长**） |
 | 写入 | 面板「保存」→ `PUT /api/calibguard/settings`；或让 AI 调 `calibguard_configure`（同一份设置，**不读写 API Key/凭据值**）；原子写，非法值不落盘（校验口径与 CG_GUI 一致） |
 | 读取 | 面板加载时回填；AI 每次调用时由引擎合并，**改完立即生效、无需重启** |
 | 重置 | 面板「重置」→ 清空为「跟随插件配置默认值」 |
