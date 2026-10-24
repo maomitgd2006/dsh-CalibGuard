@@ -371,7 +371,17 @@ def _op_status(options: dict | None = None) -> dict:
         torch_version = f"unavailable: {type(exc).__name__}"
 
     pipeline = _STATE["pipeline"]
-    cfg = pipeline.cfg if pipeline is not None else _build_cfg(options)
+    # status 必须反映「本次请求下发的共享设置」，而不是只在首次建 pipeline 时的旧 cfg：
+    # 否则面板关掉云端复核并保存后，刷新状态又把旧值带回来（勾选状态回弹）。
+    # pipeline 只用于 loaded/device 等运行时信息；配置一律按 options 重新计算。
+    if options:
+        try:
+            cfg = _build_cfg(options)
+        except Exception as exc:  # noqa: BLE001 - 非法选项时退回 pipeline/默认配置，别让 status 整个失败
+            print(f"[calibguard-bridge] status 配置计算失败（回退旧配置）：{exc}", file=sys.stderr)
+            cfg = pipeline.cfg if pipeline is not None else _build_cfg({})
+    else:
+        cfg = pipeline.cfg if pipeline is not None else _build_cfg({})
     policy = dict(_STATE["device_policy"] or {})
     # 定档说 CUDA、但实际 torch 没启用 CUDA（典型：装的是 CPU 版 torch）→ 如实标注
     if policy.get("mode") == "cuda" and not cuda_available:

@@ -11,12 +11,13 @@
  * 缺失时整体跳过（skip），不算失败。
  */
 import assert from 'node:assert/strict'
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
 import { normalizeConfig } from '../lib/config.js'
+import { DEPS_MARKER, depsMarkerPath } from '../lib/bootstrap.js'
 import { CalibGuardEngine } from '../lib/engine.js'
 import { buildTools } from '../lib/tools.js'
 
@@ -25,6 +26,13 @@ const pythonPath = process.platform === 'win32'
   ? join(config.engineRoot, '.venv', 'Scripts', 'python.exe')
   : join(config.engineRoot, '.venv', 'bin', 'python')
 const ready = existsSync(pythonPath) && existsSync(join(config.engineRoot, 'models', 'codebert_finetuned'))
+
+// 测试用的开发 venv 没有 .deps-ok.json：补一个标记，避免 bootstrap 真去跑安装脚本
+if (ready && !existsSync(depsMarkerPath(config.engineRoot))) {
+  writeFileSync(depsMarkerPath(config.engineRoot), JSON.stringify({
+    ok: true, verifiedAt: Date.now(), testMarker: true,
+  }), 'utf8')
+}
 const skip = ready ? false : `缺少引擎环境（${pythonPath} 或模型权重），跳过端到端测试`
 
 const reportDir = mkdtempSync(join(tmpdir(), 'calibguard-dsh-test-'))
@@ -100,6 +108,29 @@ test('共享设置参与合并：GUI 保存的阈值对工具调用生效，调�
     )
     assert.equal(result.config.allowThreshold, 0.4, '调用级参数应覆盖共享设置')
     assert.equal(result.config.blockThreshold, 0.98, '未覆盖的项仍用共享设置')
+
+    // 回归：pipeline 已存在（模型已加载）后修改共享设置，status 必须反映新值，
+    // 否则面板「关掉云端复核 → 保存 → 刷新」会看到勾选状态回弹。
+    const changedStore = {
+      get: () => ({ allowThreshold: 0.02, blockThreshold: 0.98, llmEnabled: false }),
+    }
+    const changed = new CalibGuardEngine({
+      config: { ...config, reportDir, idleShutdownMs: 0 },
+      logger: silentLogger,
+      settingsStore: changedStore,
+    })
+    try {
+      const changedStatus = await changed.inspect()
+      assert.equal(changedStatus.llm.enabled, false, 'status 应采用本次下发的 llmEnabled=false')
+      const changedAudit = await changed.audit(
+        [join(config.engineRoot, 'samples', 'benign_tool.py')],
+        {},
+        {},
+      )
+      assert.equal(changedAudit.config.llmEnabled, false, '后续审核也必须使用关闭后的设置')
+    } finally {
+      await changed.stop('test teardown')
+    }
   } finally {
     await shared.stop('test teardown')
   }
