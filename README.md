@@ -4,7 +4,7 @@
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-124%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-126%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 把 [CalibGuard](https://github.com/P-436/CalibGuard) 的文件安全审计引擎接进 **DeepSeek Harness（DSH）**：
@@ -93,6 +93,10 @@ GitHub 直连失败会自动换 gh-proxy / ghfast / ghproxy 镜像；pip 依赖�
 **进度在哪看**：面板顶部会出现「首次运行：正在自动准备引擎与依赖」卡片（含当前步骤与输出尾巴）；
 宿主日志里是 `[calibguard]` 开头的行。准备期间审计按钮不可用，完成后点「刷新状态」即可。
 首次约需 **10–20 分钟**（取决于网速和 pip 源），只需一次。
+
+> **安装被中断怎么办**：0.5.4 起，装完依赖会实际导入 torch / transformers / sklearn / openai 校验，
+> 成功才写 `<引擎目录>/.deps-ok.json`；如果安装中途被中断（关掉 DSH、关机），下次启动会检测到
+> 依赖不完整并**自动补装**，不会再把半成品 venv 当作就绪（面板会显示"正在自动补装缺失依赖"）。
 
 > 想提前预热、或断网/锁网环境需要离线安装，也可以手动跑安装器（同一套逻辑，幂等）：
 >
@@ -319,6 +323,7 @@ CalibGuard 会盯着当前 profile 的插件列表（`dsh.profile.bundles`），
 | **面板保存 API Key 提示"需要 credentialRef"** | 升级到 ≥ **0.3.3**：面板「凭据名」可直接填写并记住（默认预填 `DEEPSEEK_API_KEY`）；旧版本请把 `credentialRef` 写进插件配置 |
 | **提示"当前环境不支持写入 DSH 凭据库"** | ≥0.3.6 起会自动回退到本机凭据文件 `~/.dsh/calibguard-credentials.json`（0600），面板会显示存储位置；想改回凭据库时在 DSH Models 页配置即可。也可用插件配置 `llmApiKey`（不推荐） |
 | **审计结果保存在哪 / 想清空** | 保存在引擎 `reports/` 目录（默认 `<engineRoot>/reports`），每次审计生成 JSON + Markdown；面板结果区显示路径并带「清空结果」按钮；AI 工具返回 `report_md_path` / `report_json_path` |
+| **报错 No module named 'sklearn' / 'torch' / 'openai'，或状态显示 torch unavailable** | 说明引擎 venv 的依赖没装全（典型原因：上次安装被中断后 DSH 重启）。升级到 **0.5.4** 后启动时会自动检测并补装；旧版本请在插件目录运行 `node setup.mjs --dest "<引擎目录>"`，完成后重启 DSH（或点刷新状态） |
 | **审计时总提示"首次会加载模型"** | 0.3.3 起只在模型尚未加载时提示；加载后按钮只显示「审计中…」，顶部状态显示「模型 已加载」 |
 | **有 NVIDIA 显卡（如 RTX 2060 / GTX 1060）但一直显示 CPU** | 先看面板的「推理设备」原因：算力 **≥7.5**（如 RTX 2060）却显示 CPU → 装的是 CPU 版 torch，升级到 ≥0.3.3 后点提示或运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）；算力 **<7.5**（如 GTX 1060 5GB / 6.1）→ **强制 CPU 是正常行为**，CPU 版 torch 已是最优，面板不会提示重装 |
 | **想强制用 GPU / CPU 版 torch** | 安装时加 `--force-cuda` / `--cpu`（配合 `--reinstall-torch` 可覆盖已装版本）；运行时设备由插件配置 `device`（auto/cpu/cuda）决定，`cuda` 需要 CUDA 版 torch |
@@ -341,7 +346,7 @@ dsh-CalibGuard/
 ├── engine/              从 CG_GUI 复制来的引擎核心（代码/词表/校准参数，不含 475 MB 权重）
 ├── cordis.patch.yml     组合包 patch（把插件行插进 profile 配置树）
 ├── scripts/             link-dsh（开发期挂包）、bridge-selftest（引擎自检）
-├── test/                node --test（124 个用例；缺引擎环境时自动 skip）
+├── test/                node --test（126 个用例；缺引擎环境时自动 skip）
 ├── .github/workflows/   publish.yml：npm 可信发布（OIDC，可选）
 └── docs/                配置全表、性能、排错、插件契约、实现决策
 ```

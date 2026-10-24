@@ -20,7 +20,7 @@
  */
 import {
   chmodSync, copyFileSync, cpSync, createReadStream, createWriteStream, existsSync, mkdirSync,
-  readdirSync, renameSync, rmSync, statSync,
+  readdirSync, renameSync, rmSync, statSync, writeFileSync,
 } from 'node:fs'
 import { createHash } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
@@ -42,6 +42,26 @@ const ENGINE_MIRRORS = ['https://gh-proxy.com/', 'https://ghfast.top/', 'https:/
 const TORCH_CUDA_INDEX = process.env.DSH_CALIBGUARD_TORCH_INDEX || 'https://download.pytorch.org/whl/cu128'
 const CUDA_MIN = [12, 8]
 const CUDA_MIN_COMPUTE_CAP = [7, 5]
+/** 运行期必须能导入的模块：任何一个缺失都说明依赖没装全。 */
+const REQUIRED_MODULES = ['torch', 'transformers', 'sklearn', 'openai', 'yaml', 'numpy']
+
+/**
+ * 用 venv 的 python 实际导入一遍关键模块。
+ * pip 返回成功 ≠ 依赖装全：安装中途被中断（关 DSH/关机）、镜像缺包等都会留下半成品 venv。
+ */
+function verifyPythonDeps(python) {
+  const code = `import ${REQUIRED_MODULES.join(', ')}; print("deps-ok")`
+  const result = spawnSync(python, ['-c', code], {
+    encoding: 'utf8',
+    timeout: 300_000,
+    env: { ...process.env, PYTHONIOENCODING: 'utf-8' },
+  })
+  if (result.status === 0) return { ok: true, error: '' }
+  const detail = String(result.stderr || result.stdout || '').trim()
+    .split(/\r?\n/).filter(Boolean).pop() || `exit ${result.status}`
+  return { ok: false, error: detail }
+}
+
 /** 并发分段下载的段数（0/负数 = 单连接）。 */
 const DOWNLOAD_CONNECTIONS = Number(process.env.DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS || 4)
 /** pip 索引：默认清华镜像，失败回退官方 PyPI。 */
@@ -391,7 +411,8 @@ function printHelp() {
 说明：
   • 默认用插件内置的引擎（CG_GUI 核心代码，约 5 MB），模型权重（475 MB）分两片
     从 npm 镜像下载（npmmirror 加速，每个分片 < 256 MB）；也可用 --from 指定 CG 发行包；
-  • 依赖安装另需约 1–3 GB 磁盘；
+  • 依赖安装另需约 1–3 GB 磁盘；装完会实际导入 torch / transformers / sklearn / openai 校验，
+    成功才写 .deps-ok.json；venv 不完整（如上次中断）时，DSH 下次启动会自动补装；
   • 本机没有 64 位 Python 3.10–3.12 时，会自动用 uv 下载便携 Python 3.10.8（约 30 MB）；
   • 下载默认走 GitHub 直连，失败会自动尝试 ghproxy / gh-proxy / ghfast 镜像；
     可用 DSH_CALIBGUARD_ENGINE_MIRRORS 追加镜像前缀（逗号分隔）；
@@ -951,6 +972,9 @@ async function main() {
       }
     }
 
+    // 重建 venv 时旧的依赖标记必须失效，否则下次启动会误判为"依赖就绪"
+    if (options.force) rmSync(join(options.dest, '.deps-ok.json'), { force: true })
+
     const after = engineStatus(options.dest)
     if (!after.hasEngine) {
       fail(`引擎准备完成，但 ${options.dest} 里没有 calibguard/。\n`
@@ -1060,7 +1084,22 @@ async function main() {
       warn('当前 torch 是 CPU 版：审计仍可运行，只是用 CPU。'
         + '可重跑：node setup.mjs --reinstall-torch（或 --force-cuda 跳过兼容性检查）')
     }
-    log('✓ 依赖安装完成')
+
+    // 依赖安装后必须实测可导入，成功才写 .deps-ok.json（面板/引导据此判断"依赖就绪"）。
+    step('校验 Python 依赖（torch / transformers / sklearn / openai …）')
+    const deps = verifyPythonDeps(python)
+    if (!deps.ok) {
+      fail(`依赖安装后校验失败：${deps.error}\n`
+        + '常见原因：安装中途被中断（关闭 DSH / 关机）、pip 源缺包、磁盘空间不足。\n'
+        + `请重试：node setup.mjs --dest "${options.dest}"（会补装缺失依赖）`)
+    }
+    writeFileSync(join(options.dest, '.deps-ok.json'), `${JSON.stringify({
+      ok: true,
+      verifiedAt: Date.now(),
+      python,
+      modules: REQUIRED_MODULES,
+    }, null, 2)}\n`, 'utf8')
+    log('✓ 依赖校验通过（已写 .deps-ok.json）')
   }
 
   // ---------- 4. 自检 ----------

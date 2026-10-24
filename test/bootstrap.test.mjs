@@ -12,13 +12,29 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, test } from 'node:test'
 
-import { EnvironmentBootstrap, venvPythonPath } from '../lib/bootstrap.js'
+import {
+  DEPS_MARKER, EnvironmentBootstrap, depsMarkerValid, venvPythonPath,
+} from '../lib/bootstrap.js'
 
 const tempDirs = []
 function tempEngine() {
   const dir = mkdtempSync(join(tmpdir(), 'calibguard-bootstrap-'))
   tempDirs.push(dir)
   return dir
+}
+
+/** 造一个「venv + 依赖标记」都齐全的引擎目录（不真的装依赖）。 */
+function tempReadyEngine({ marker = true, verifiedAt = Date.now() } = {}) {
+  const engineRoot = tempEngine()
+  const python = venvPythonPath(engineRoot)
+  mkdirSync(join(python, '..'), { recursive: true })
+  writeFileSync(python, '', 'utf8')
+  if (marker) {
+    writeFileSync(join(engineRoot, DEPS_MARKER), JSON.stringify({
+      ok: true, verifiedAt, python, modules: ['torch', 'sklearn'],
+    }), 'utf8')
+  }
+  return engineRoot
 }
 
 after(() => {
@@ -34,19 +50,34 @@ test('venvPythonPath 按平台给出解释器路径', () => {
   }
 })
 
-test('venv 已存在 → 立即就绪，不 spawn（start 同步 resolve）', async () => {
-  const engineRoot = tempEngine()
-  const python = venvPythonPath(engineRoot)
-  mkdirSync(join(python, '..'), { recursive: true })
-  writeFileSync(python, '', 'utf8')
+test('venv + 依赖标记齐全 → 立即就绪，不 spawn（start 同步 resolve）', async () => {
+  const engineRoot = tempReadyEngine()
 
   const bootstrap = new EnvironmentBootstrap({ engineRoot })
   assert.equal(bootstrap.venvReady, true)
+  assert.equal(bootstrap.depsReady, true)
   const snapshot = await bootstrap.start()
   assert.equal(snapshot.state, 'ready')
   assert.equal(snapshot.venvReady, true)
+  assert.equal(snapshot.depsReady, true)
   // 重复 start 幂等
   assert.equal((await bootstrap.start()).state, 'ready')
+})
+
+test('venv 存在但缺依赖标记 → depsReady=false（启动时会自动补装）', () => {
+  const engineRoot = tempReadyEngine({ marker: false })
+  const bootstrap = new EnvironmentBootstrap({ engineRoot })
+  assert.equal(bootstrap.venvReady, true)
+  assert.equal(bootstrap.depsReady, false)
+  assert.equal(depsMarkerValid(engineRoot), false)
+})
+
+test('依赖标记早于 requirements 更新时间 → 失效', () => {
+  const engineRoot = tempReadyEngine({ verifiedAt: Date.now() - 60_000 })
+  assert.equal(depsMarkerValid(engineRoot), true)
+  // requirements 比标记新 → 需要重新校验/补装
+  writeFileSync(join(engineRoot, 'requirements-gui.txt'), 'scikit-learn>=1.3.0\n', 'utf8')
+  assert.equal(depsMarkerValid(engineRoot), false)
 })
 
 test('关闭 autoSetup → disabled，不尝试联网/安装', async () => {

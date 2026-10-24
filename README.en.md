@@ -4,7 +4,7 @@ English | [中文](README.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-124%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-126%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
 Plugs the [CalibGuard](https://github.com/P-436/CalibGuard) file-security auditing engine into
@@ -103,6 +103,11 @@ checks — use at your own risk) or `node setup.mjs --cpu` (force CPU), or the e
 the current step and the tail of the installer output; host logs show `[calibguard]` lines. The audit
 button stays disabled until it is ready — press "刷新状态 / Refresh" afterwards. Expect **10–20 minutes**
 once (depends on network and pip mirror).
+
+> **If the install was interrupted**: since 0.5.4, the installer actually imports torch / transformers /
+> sklearn / openai and only then writes `<engineRoot>/.deps-ok.json`. If the install was interrupted
+> (DSH closed, machine shut down), the next start detects the incomplete venv and **automatically repairs**
+> it instead of treating it as ready (the panel shows "reinstalling missing dependencies").
 
 > You can also pre-warm, or install offline, by running the same installer manually (idempotent):
 >
@@ -345,6 +350,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | **Panel says "credentialRef required" when saving the API key** | Upgrade to ≥ **0.3.3**: the panel has a "credential name" field (defaults to `DEEPSEEK_API_KEY`) and remembers it; older versions require `credentialRef` in the plugin config |
 | **"This environment does not support writing the DSH credential store"** | Since 0.3.6 the key automatically falls back to the local `~/.dsh/calibguard-credentials.json` (0600) and the panel shows the storage location; you can also configure it in the DSH Models page, or use plugin config `llmApiKey` (not recommended) |
 | **Where are audit results saved / how to clear them** | In the engine's `reports/` directory (default `<engineRoot>/reports`): JSON + Markdown per audit. The panel shows the path and has a "clear results" button; AI tools return `report_md_path` / `report_json_path` |
+| **"No module named ''sklearn'' / ''torch'' / ''openai''", or status shows torch unavailable** | The engine venv is missing dependencies (usually because a previous install was interrupted and DSH restarted). Since **0.5.4** the plugin detects this on startup and automatically repairs it; on older versions run `node setup.mjs --dest "<engineRoot>"` in the plugin directory, then restart DSH (or press refresh) |
 | **"First audit will load the model" hint shows every time** | Since 0.3.3 it is only shown while the model is not loaded yet; afterwards the button just says "auditing…" and the header shows "model loaded" |
 | **NVIDIA GPU (e.g. RTX 2060 / GTX 1060) but the engine keeps using CPU** | Check the panel's "inference device" reason: compute capability **≥7.5** (e.g. RTX 2060) with CPU → the installed torch is the CPU build, upgrade to ≥0.3.3 and use the panel prompt or run `node setup.mjs --reinstall-torch` (~2.5 GB); compute capability **<7.5** (e.g. GTX 1060 5GB / 6.1) → **CPU is the expected behavior**, the CPU torch build is already optimal and the panel no longer prompts to reinstall |
 | **Want to force the GPU / CPU torch build** | Add `--force-cuda` / `--cpu` at install time (combine with `--reinstall-torch` to replace an existing build); the runtime device is controlled by the plugin config `device` (auto/cpu/cuda); `cuda` requires the CUDA build |
@@ -365,7 +371,7 @@ dsh-CalibGuard/
 ├── engine/              Bundled engine core copied from CG_GUI (code / tokenizer / calibration, no weights)
 ├── cordis.patch.yml     Bundle patch (inserts the loader row)
 ├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
-├── test/                node --test (124 cases; auto-skip when the engine env is missing)
+├── test/                node --test (126 cases; auto-skip when the engine env is missing)
 ├── .github/workflows/   publish.yml: npm trusted publishing (OIDC, optional)
 └── docs/                configuration, performance, troubleshooting, plugin contract, design notes
 ```

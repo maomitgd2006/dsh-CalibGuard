@@ -10,17 +10,25 @@
  * 不启动任何 DSH 服务、不监听端口、不触碰用户的 profile。
  */
 import assert from 'node:assert/strict'
-import { existsSync } from 'node:fs'
+import { existsSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { test } from 'node:test'
 
 import { normalizeConfig } from '../lib/config.js'
+import { DEPS_MARKER, depsMarkerPath } from '../lib/bootstrap.js'
 
 const config = normalizeConfig(undefined)
 const pythonPath = process.platform === 'win32'
   ? join(config.engineRoot, '.venv', 'Scripts', 'python.exe')
   : join(config.engineRoot, '.venv', 'bin', 'python')
 const ready = existsSync(pythonPath)
+
+// 测试用的开发 venv 没有 .deps-ok.json：补一个标记，避免 bootstrap 真去跑安装脚本
+if (ready && !existsSync(depsMarkerPath(config.engineRoot))) {
+  writeFileSync(depsMarkerPath(config.engineRoot), JSON.stringify({
+    ok: true, verifiedAt: Date.now(), testMarker: true,
+  }), 'utf8')
+}
 
 let Context
 let plugin

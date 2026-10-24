@@ -3,7 +3,7 @@
  * 不启动桥接子进程，纯注册路径；真实端到端见 bridge.test.mjs。
  */
 import assert from 'node:assert/strict'
-import { mkdtempSync } from 'node:fs'
+import { existsSync, mkdtempSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { test } from 'node:test'
@@ -12,6 +12,21 @@ import { test } from 'node:test'
 process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'calibguard-test-home-'))
 
 import { apply, Config, inject, name } from '../lib/index.js'
+import { normalizeConfig } from '../lib/config.js'
+import { DEPS_MARKER, depsMarkerPath } from '../lib/bootstrap.js'
+
+// apply() 会触发后台环境预热：给开发 venv 补一个测试标记，避免单测真的去跑安装脚本
+{
+  const testEngineRoot = normalizeConfig(undefined).engineRoot
+  const testPython = process.platform === 'win32'
+    ? join(testEngineRoot, '.venv', 'Scripts', 'python.exe')
+    : join(testEngineRoot, '.venv', 'bin', 'python')
+  if (existsSync(testPython) && !existsSync(depsMarkerPath(testEngineRoot))) {
+    writeFileSync(depsMarkerPath(testEngineRoot), JSON.stringify({
+      ok: true, verifiedAt: Date.now(), testMarker: true,
+    }), 'utf8')
+  }
+}
 
 /** schemastery 只在装了 node_modules（或跑了 scripts/link-dsh.mjs）时才可解析。 */
 const schemasteryAvailable = await import('@deepseek-ai/schemastery')
