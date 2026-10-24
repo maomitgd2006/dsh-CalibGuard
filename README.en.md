@@ -94,9 +94,10 @@ checks — use at your own risk) or `node setup.mjs --cpu` (force CPU), or the e
 > the other). The CUDA build is a full torch and falls back to CPU when no GPU is available, so coexistence is
 > unnecessary.
 >
-> **Machines that already have the CPU build**: with ≥0.3.5 the panel header detects "NVIDIA … but torch is the
-> CPU build" and offers a **one-click "Reinstall GPU torch (~2.5 GB)"** button (uninstalls the CPU build, installs
-> CUDA, then restarts the bridge). CLI equivalent: `node "<plugin dir>/setup.mjs" --reinstall-torch --force-cuda`.
+> **Machines that already have the CPU build**: only when the GPU compute capability is **≥7.5** (e.g. RTX 2060)
+> and torch is the CPU build does the panel header detect "NVIDIA … but torch is the CPU build" and offer a
+> **one-click "Reinstall GPU torch (~2.5 GB)"** button (uninstalls the CPU build, installs CUDA, then restarts the
+> bridge). GPUs below 7.5 (e.g. GTX 1060 5GB / 6.1) correctly stay on CPU and are no longer prompted to reinstall.
 
 **Where to watch progress**: the panel shows a "First run: preparing engine and dependencies" card with
 the current step and the tail of the installer output; host logs show `[calibguard]` lines. The audit
@@ -227,8 +228,9 @@ Sidebar shield icon → **drop files onto the dashed area** (or pick files, or p
 
 ### 3) Shared settings (panel ↔ AI)
 
-The panel's settings section mirrors CG_GUI: **cloud-review toggle → API Key / Base URL / model name /
-content source / delivery mode (with the matching truncation or sliding-window fields) → gray zone**.
+The panel's "Regular parameters" section mirrors CG_GUI (**collapsed by default**; the summary shows the current
+thresholds and cloud-review state): **cloud-review toggle → API Key / Base URL / model name / content source /
+delivery mode (with the matching truncation or sliding-window fields) → gray zone**.
 
 After pressing Save:
 
