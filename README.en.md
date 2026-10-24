@@ -4,10 +4,10 @@ English | [中文](README.md)
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-122%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-124%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
-Plugs the [CalibGuard](https://github.com/P-436/CG) file-security auditing engine into
+Plugs the [CalibGuard](https://github.com/P-436/CalibGuard) file-security auditing engine into
 **DeepSeek Harness (DSH)**: the agent screens untrusted code *locally* before running or installing it,
 and you can also drag files into a sidebar panel for the same audit.
 
@@ -23,7 +23,9 @@ and you can also drag files into a sidebar panel for the same audit.
   (never silently upgrades)**; you can skip a version or disable the prompt;
 - ⚙️ **One set of settings** — saved in the panel, used by the AI too.
 
-> This is the **DSH plugin** for [CG](https://github.com/P-436/CG). To make the plugin work out of the box,
+> **This repository is only the DSH plugin — it is not the CalibGuard main repository.**
+> CalibGuard main repository (engine, desktop GUI, benchmarks): **[P-436/CalibGuard](https://github.com/P-436/CalibGuard)**.
+> To make the plugin work out of the box,
 > the engine core needed at runtime (`calibguard/`, `audit_service.py`, tokenizer files and calibration
 > parameters) is **copied into this repository under [`engine/`](engine/README.md)** (copied as-is, logic not
 > modified; see that folder's README for how to re-sync). The 475 MB model weights are distributed as a
@@ -336,12 +338,13 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | Gray zone always goes to manual review | No credential configured: save "credential name + API key" in the panel, or set `credentialRef`, or configure it in DSH Models |
 | **Will it warn me about other DSH plugins / how to disable** | Default is "on plugin-list update"; the collapsed "Advanced / other settings" section lets you switch to weekly/monthly/quarterly/half-yearly or "off"; never scans itself or `@deepseek-ai/*`; state file `$DSH_HOME/calibguard-plugin-scan.json` |
 | **Does CalibGuard auto-upgrade itself** | **No.** By default it checks once per DSH startup and only shows a notice; you can open the Release page / copy the command to upgrade, or "skip this version" / "don't ask again"; the check frequency (off/daily/weekly) is in the collapsed section |
+| **Clicking "Save" does nothing / errors (old versions)** | Old versions (≤0.3.5) failed to save the API key when the DSH credential store was not writable; since 0.3.6 (current 0.5.1) the key falls back to the local credential file and the panel shows the storage location. Settings and the key are saved in two steps: settings are written first, and a key failure is reported separately |
 | **Don't know how to change the settings** | Just ask the agent: "set the thresholds / cloud review / delivery mode to …" — it calls `calibguard_configure` and the panel reflects it. API keys must be entered by the user in the panel; the tool never reads or writes them |
 | **Panel says "credentialRef required" when saving the API key** | Upgrade to ≥ **0.3.3**: the panel has a "credential name" field (defaults to `DEEPSEEK_API_KEY`) and remembers it; older versions require `credentialRef` in the plugin config |
 | **"This environment does not support writing the DSH credential store"** | Since 0.3.6 the key automatically falls back to the local `~/.dsh/calibguard-credentials.json` (0600) and the panel shows the storage location; you can also configure it in the DSH Models page, or use plugin config `llmApiKey` (not recommended) |
 | **Where are audit results saved / how to clear them** | In the engine's `reports/` directory (default `<engineRoot>/reports`): JSON + Markdown per audit. The panel shows the path and has a "clear results" button; AI tools return `report_md_path` / `report_json_path` |
 | **"First audit will load the model" hint shows every time** | Since 0.3.3 it is only shown while the model is not loaded yet; afterwards the button just says "auditing…" and the header shows "model loaded" |
-| **NVIDIA GPU (e.g. RTX 2060) but the engine keeps using CPU** | The installed torch is the CPU build (old installer behavior). Upgrade to ≥0.3.3 (the panel will tell you) and run `node setup.mjs --reinstall-torch` (~2.5 GB) in the plugin directory, then restart DSH |
+| **NVIDIA GPU (e.g. RTX 2060 / GTX 1060) but the engine keeps using CPU** | Check the panel's "inference device" reason: compute capability **≥7.5** (e.g. RTX 2060) with CPU → the installed torch is the CPU build, upgrade to ≥0.3.3 and use the panel prompt or run `node setup.mjs --reinstall-torch` (~2.5 GB); compute capability **<7.5** (e.g. GTX 1060 5GB / 6.1) → **CPU is the expected behavior**, the CPU torch build is already optimal and the panel no longer prompts to reinstall |
 | **Want to force the GPU / CPU torch build** | Add `--force-cuda` / `--cpu` at install time (combine with `--reinstall-torch` to replace an existing build); the runtime device is controlled by the plugin config `device` (auto/cpu/cuda); `cuda` requires the CUDA build |
 | A legitimate third-party library is BLOCKed | Minified libraries are full of eval/base64 patterns and the corpus is Python-heavy — known false-positive tendency, see [docs/troubleshooting.md](docs/troubleshooting.md) |
 | Panel returns 401/403 | Browser session isn't authenticated with the host: refresh / sign in again |
@@ -360,7 +363,7 @@ dsh-CalibGuard/
 ├── engine/              Bundled engine core copied from CG_GUI (code / tokenizer / calibration, no weights)
 ├── cordis.patch.yml     Bundle patch (inserts the loader row)
 ├── scripts/             link-dsh (dev-time junction), bridge-selftest (engine self-check)
-├── test/                node --test (122 cases; auto-skip when the engine env is missing)
+├── test/                node --test (124 cases; auto-skip when the engine env is missing)
 ├── .github/workflows/   publish.yml: npm trusted publishing (OIDC, optional)
 └── docs/                configuration, performance, troubleshooting, plugin contract, design notes
 ```
@@ -380,7 +383,7 @@ dsh-CalibGuard/
 | Repository | Contents |
 |---|---|
 | **maomitgd2006/dsh-CalibGuard** (this repo) | DSH plugin: tools / service / routes + browser panel + Python bridge |
-| [P-436/CG](https://github.com/P-436/CG) | Engine and benchmark: `CG_GUI/` (desktop shell + engine + model), `CG_Bench/` (training/eval) |
+| **[P-436/CalibGuard](https://github.com/P-436/CalibGuard)** (CalibGuard main repository) | Engine and benchmark: `CG_GUI/` (desktop shell + engine + model), `CG_Bench/` (training/eval) |
 
 ## License
 

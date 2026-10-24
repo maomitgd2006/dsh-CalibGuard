@@ -16,7 +16,7 @@
 | **装了新插件没有收到扫描提醒** | 默认在插件列表变化后 1 分钟内检测并扫描；确认面板「其他 DSH 插件扫描」里"更新时自动扫描"未关闭，且引擎环境已就绪（首次装环境期间会跳过）。也可点「立即扫描全部」。结果在 `$DSH_HOME/calibguard-plugin-scan.json` |
 | **不想扫描其他插件** | 面板底部「高级 / 其他设置」折叠区把频率设为「不扫描」；或在插件配置里设 `pluginScanMode: off` |
 | **总提示 CalibGuard 有新版本 / 想关掉** | 顶部提示是「只提示不静默升级」；点「以后不再询问」即永久关闭，或「跳过此版本」只忽略当前版本；折叠区可改检查频率（`off`/`startup`/`daily`/`weekly`），也可点「立即检测」 |
-| **有 NVIDIA 显卡但引擎显示 CPU** | 装的是 CPU 版 torch。升级到 ≥0.3.3（面板顶部会提示），然后在插件目录运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）装 CUDA 版；装完重启 DSH。`DSH_CALIBGUARD_CPU_ONLY=1` 可反向强制 CPU |
+| **有 NVIDIA 显卡但引擎显示 CPU** | 看面板「推理设备」的原因：算力 **≥7.5** 且显示 CPU → 装的是 CPU 版 torch，运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）；算力 **<7.5**（如 GTX 1060 5GB / 6.1）→ **强制 CPU 是正常行为**，CPU 版 torch 已是最优，0.5.1 起面板不再提示重装（只会显示一行设备说明）。|
 | **已经装了 CPU 版 torch，想换成 GPU 版** | 升级到 ≥0.3.5：面板顶部点「一键重装 GPU 版 torch（约 2.5 GB）」（先卸载再装，完成自动重启桥接）；或命令行 `node "<插件目录>/setup.mjs" --reinstall-torch --force-cuda` |
 | **想强制装 GPU / CPU 版 torch** | 安装时加 `--force-cuda` / `--cpu`（可配合 `--reinstall-torch` 覆盖已装版本）；CPU 版与 CUDA 版不能共存于同一 venv，CUDA 版在无 GPU 时会自动回落 CPU |
 | **首次安装特别慢 / 提示某个源不可用** | 模型默认 4 路并发分段下载（`DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS` 可调），GitHub 失败自动换 gh-proxy/ghfast/ghproxy 镜像；pip 自动在 清华/阿里/中科大/腾讯/官方 之间回退。实在慢可手动下载 `calibguard-model-1.0.0.zip` 放到缓存目录（见下一条） |

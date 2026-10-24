@@ -3,7 +3,7 @@
  * 一键准备 CalibGuard 引擎（给从 Release 下载本插件的用户用）。
  *
  * 本插件只是"壳"：真正的审计引擎（`calibguard/` 代码 + `models/` 模型权重）在
- * CG 仓库里，且需要一套装好依赖的 Python 环境。本脚本把这些补齐：
+ * CalibGuard 主仓库（P-436/CalibGuard）里，且需要一套装好依赖的 Python 环境。本脚本把这些补齐：
  *
  *   1) 下载 CG 的发行包（默认 `CalibGuard-GUI.zip`，约 467 MB）并解压到 `<本包同级>/CG_GUI`；
  *   2) 在 `<CG_GUI>/.venv` 创建 Python 虚拟环境；

@@ -3,7 +3,13 @@
  * 不启动桥接子进程，纯注册路径；真实端到端见 bridge.test.mjs。
  */
 import assert from 'node:assert/strict'
+import { mkdtempSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { test } from 'node:test'
+
+// 测试不要读本机真实 DSH 设置文件（否则用户保存过 credentialRef 会影响断言）
+process.env.DSH_HOME = mkdtempSync(join(tmpdir(), 'calibguard-test-home-'))
 
 import { apply, Config, inject, name } from '../lib/index.js'
 

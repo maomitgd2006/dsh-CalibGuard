@@ -269,6 +269,48 @@ test('GET/PUT /settings：GUI 保存的共享设置可读回，非法值 400', a
   }
 })
 
+test('PUT /settings：面板完整保存负载（阈值/凭据名/插件扫描/自更新）能落盘', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'calibguard-routes-save-'))
+  const settingsStore = new SettingsStore({ file: join(dir, 'settings.json') })
+  try {
+    const { routes } = createCalibGuardRoutes({ engine: fakeEngine(), config, settingsStore })
+    const handler = routeOf(routes, 'settings').handler
+    const payload = {
+      llmEnabled: true,
+      allowThreshold: 0.15,
+      blockThreshold: 0.85,
+      llmContentSource: 'evidence',
+      llmDeliveryMode: 'truncate',
+      llmTruncateChars: 3000,
+      llmWindowChars: 3000,
+      llmWindowOverlap: 500,
+      maxFiles: 20,
+      llmBaseUrl: 'https://api.deepseek.com',
+      llmModel: 'deepseek-chat',
+      credentialRef: 'DEEPSEEK_API_KEY',
+      pluginScanMode: 'update',
+      pluginScanMaxFiles: 100,
+      selfUpdateCheck: 'startup',
+    }
+    const put = await invoke(handler, fakeRequest({ method: 'PUT', body: JSON.stringify(payload) }))
+    assert.equal(put.res.statusCode, 200, JSON.stringify(put.json))
+    assert.deepEqual(put.json.saved, payload)
+    const reloaded = await invoke(handler, fakeRequest())
+    assert.deepEqual(reloaded.json.settings, payload)
+
+    // 新枚举的非法值要 400，且不能覆盖已保存的设置
+    const bad = await invoke(handler, fakeRequest({
+      method: 'PUT',
+      body: JSON.stringify({ ...payload, pluginScanMode: 'every-minute' }),
+    }))
+    assert.equal(bad.res.statusCode, 400)
+    const after = await invoke(handler, fakeRequest())
+    assert.deepEqual(after.json.settings, payload)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('status 响应里带出共享设置（面板回填用）', async () => {
   const settingsStore = { file: 'X:\\settings.json', diagnostics: () => ({ file: 'X:\\settings.json', settings: {}, loadError: null }) }
   const engine = fakeEngine({ settings: { allowThreshold: 0.02 } })

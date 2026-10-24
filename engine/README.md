@@ -1,6 +1,6 @@
 # engine/ —— 内置引擎核心（复制自 CG_GUI）
 
-本目录是 [CG](https://github.com/P-436/CG) 仓库 `CG_GUI/` 里运行审计所需的**核心文件副本**，
+本目录是 [CalibGuard 主仓库 P-436/CalibGuard](https://github.com/P-436/CalibGuard) 的 `CG_GUI/` 里运行审计所需的**核心文件副本**，
 让 `dsh-calibguard` 安装后不必再从 GitHub 下载 CG 发行包：
 
 | 内容 | 说明 |

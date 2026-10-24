@@ -4,10 +4,10 @@
 
 ![license](https://img.shields.io/badge/license-MIT-green)
 ![node](https://img.shields.io/badge/node-%E2%89%A520-blue)
-![tests](https://img.shields.io/badge/tests-122%20passed-brightgreen)
+![tests](https://img.shields.io/badge/tests-124%20passed-brightgreen)
 [![npm](https://img.shields.io/npm/v/dsh-calibguard.svg)](https://www.npmjs.com/package/dsh-calibguard)
 
-把 [CalibGuard](https://github.com/P-436/CG) 的文件安全审计引擎接进 **DeepSeek Harness（DSH）**：
+把 [CalibGuard](https://github.com/P-436/CalibGuard) 的文件安全审计引擎接进 **DeepSeek Harness（DSH）**：
 让 AI 在执行 / 安装来路不明的代码之前先过一道**本地**门控，你也可以在侧边栏面板里直接拖文件审计。
 
 - 🔒 **默认离线**：本地 CodeBERT + Platt 校准给出可解释的「恶意概率」，文件内容不会上传；
@@ -18,7 +18,9 @@
 - 🔔 **新版本提示**：定时检查本插件是否有新版本，**弹窗询问是否升级，绝不静默升级**（可设置跳过此版本/以后不再询问）；
 - ⚙️ **一套设置**：面板里保存的阈值与送审口径，AI 调用同样生效。
 
-> 本仓库是 [CG](https://github.com/P-436/CG) 的 **DSH 插件**。为了让插件开箱即用，运行所需的引擎核心
+> **本仓库只是 DSH 插件，不是 CalibGuard 主仓库。**
+> CalibGuard 主仓库（引擎、桌面 GUI、基准）：**[P-436/CalibGuard](https://github.com/P-436/CalibGuard)**。
+> 为了让插件开箱即用，运行所需的引擎核心
 >（`calibguard/`、`audit_service.py`、词表与校准参数）已**复制到本仓库 [`engine/`](engine/README.md)**
 >（只复制、不改逻辑，同步方法见该目录 README）；模型权重（475 MB）由本仓库 Release 资产分发；
 > 运行时通过常驻 Python 子进程调用引擎。
@@ -311,12 +313,13 @@ CalibGuard 会盯着当前 profile 的插件列表（`dsh.profile.bundles`），
 | 首次审计很慢 | 正常：要加载约 475 MB 权重（之后走常驻进程） |
 | **装了别的 DSH 插件会提醒吗 / 怎么关** | 默认「插件列表更新时」扫描并提醒；面板底部「高级 / 其他设置」折叠区可改为每周/每月/每季度/每半年，或选「不扫描」关闭；不扫自己与 `@deepseek-ai/*`；结果在 `$DSH_HOME/calibguard-plugin-scan.json` |
 | **会不会自动升级 CalibGuard** | **不会**。默认每次启动检查一次，发现新版本只在面板弹提示；你可以「打开 Release 页/复制命令」自行升级，或「跳过此版本」「以后不再询问」；检查频率可在折叠区改为关闭/每天/每周 |
+| **点「保存」没反应 / 报错（旧版本）** | 旧版本（≤0.3.5）在 DSH 凭据库不可写时保存 API Key 会失败；升级到 ≥0.3.6（当前 0.5.1）会自动回退到本机凭据文件并提示存储位置。参数与 Key 是分两步保存的：参数先落盘，Key 失败会单独提示「参数已保存，但 API Key 写入失败」 |
 | **不知道怎么改设置** | 直接让 AI 改：说"把阈值/云端复核/送审方式改成…"，AI 会调 `calibguard_configure` 写入共享设置（面板同步生效）；涉及 API Key 时必须自己在面板填，AI 不会读也不会写 Key |
 | **面板保存 API Key 提示"需要 credentialRef"** | 升级到 ≥ **0.3.3**：面板「凭据名」可直接填写并记住（默认预填 `DEEPSEEK_API_KEY`）；旧版本请把 `credentialRef` 写进插件配置 |
 | **提示"当前环境不支持写入 DSH 凭据库"** | ≥0.3.6 起会自动回退到本机凭据文件 `~/.dsh/calibguard-credentials.json`（0600），面板会显示存储位置；想改回凭据库时在 DSH Models 页配置即可。也可用插件配置 `llmApiKey`（不推荐） |
 | **审计结果保存在哪 / 想清空** | 保存在引擎 `reports/` 目录（默认 `<engineRoot>/reports`），每次审计生成 JSON + Markdown；面板结果区显示路径并带「清空结果」按钮；AI 工具返回 `report_md_path` / `report_json_path` |
 | **审计时总提示"首次会加载模型"** | 0.3.3 起只在模型尚未加载时提示；加载后按钮只显示「审计中…」，顶部状态显示「模型 已加载」 |
-| **有 NVIDIA 显卡（如 RTX 2060）但一直显示 CPU** | 说明装的是 CPU 版 torch（旧版安装器行为）。升级到 ≥0.3.3 后面板会给出提示；在插件目录运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）装上 CUDA 版即可，之后重启 DSH |
+| **有 NVIDIA 显卡（如 RTX 2060 / GTX 1060）但一直显示 CPU** | 先看面板的「推理设备」原因：算力 **≥7.5**（如 RTX 2060）却显示 CPU → 装的是 CPU 版 torch，升级到 ≥0.3.3 后点提示或运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）；算力 **<7.5**（如 GTX 1060 5GB / 6.1）→ **强制 CPU 是正常行为**，CPU 版 torch 已是最优，面板不会提示重装 |
 | **想强制用 GPU / CPU 版 torch** | 安装时加 `--force-cuda` / `--cpu`（配合 `--reinstall-torch` 可覆盖已装版本）；运行时设备由插件配置 `device`（auto/cpu/cuda）决定，`cuda` 需要 CUDA 版 torch |
 | 大文件审计几十秒 | 正常：全文滑窗逐窗推理，见 [docs/performance.md](docs/performance.md) |
 | 灰区全部转人工 | 没配凭据：在面板「凭据名 + API Key」保存，或设 `credentialRef`、或在 DSH Models 页配置 |
@@ -337,7 +340,7 @@ dsh-CalibGuard/
 ├── engine/              从 CG_GUI 复制来的引擎核心（代码/词表/校准参数，不含 475 MB 权重）
 ├── cordis.patch.yml     组合包 patch（把插件行插进 profile 配置树）
 ├── scripts/             link-dsh（开发期挂包）、bridge-selftest（引擎自检）
-├── test/                node --test（122 个用例；缺引擎环境时自动 skip）
+├── test/                node --test（124 个用例；缺引擎环境时自动 skip）
 ├── .github/workflows/   publish.yml：npm 可信发布（OIDC，可选）
 └── docs/                配置全表、性能、排错、插件契约、实现决策
 ```
@@ -357,7 +360,7 @@ dsh-CalibGuard/
 | 仓库 | 内容 |
 |---|---|
 | **maomitgd2006/dsh-CalibGuard**（本仓库） | DSH 插件：工具 / 服务 / 路由 + 浏览器面板 + Python 桥接 |
-| [P-436/CG](https://github.com/P-436/CG) | 引擎与基准：`CG_GUI/`（桌面壳 + 引擎 + 模型）、`CG_Bench/`（训练/评测） |
+| **[P-436/CalibGuard](https://github.com/P-436/CalibGuard)**（CalibGuard 主仓库） | 引擎与基准：`CG_GUI/`（桌面壳 + 引擎 + 模型）、`CG_Bench/`（训练/评测） |
 
 ## 许可证
 

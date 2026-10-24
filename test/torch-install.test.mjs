@@ -24,6 +24,31 @@ test('torch 任务初始状态 idle，snapshot 形状稳定', () => {
   const gpu = engine.gpuTorchStatus()
   assert.equal(gpu.gpuName, null)
   assert.equal(gpu.cudaAvailable, null)
+  assert.equal(gpu.computeCap, null)
+  assert.equal(gpu.cudaEligible, null)
+})
+
+test('gpuTorchStatus：低算力显卡标记 cudaEligible=false（面板不再提示重装）', () => {
+  const engine = makeEngine()
+  engine.statusCache = {
+    cudaAvailable: false,
+    device: 'cpu',
+    devicePolicy: {
+      mode: 'cpu',
+      gpuName: 'NVIDIA GeForce GTX 1060 5GB',
+      computeCap: [6, 1],
+      reason: '算力 6.1 低于 cu128 轮子最低要求 7.5',
+    },
+  }
+  const low = engine.gpuTorchStatus()
+  assert.deepEqual(low.computeCap, [6, 1])
+  assert.equal(low.cudaEligible, false)
+
+  engine.statusCache.devicePolicy = {
+    mode: 'cpu', gpuName: 'NVIDIA GeForce RTX 2060', computeCap: [7, 5], reason: '算力 7.5 ≥ 7.5',
+  }
+  const ok = engine.gpuTorchStatus()
+  assert.equal(ok.cudaEligible, true)
 })
 
 test('非法 mode 被拒绝（面板只会传 auto/cuda/cpu）', async () => {
