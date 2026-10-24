@@ -1,6 +1,6 @@
 {
   "name": "dsh-calibguard",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "publishConfig": {
     "access": "public"
   },
@@ -18,7 +18,7 @@
     "type": "git",
     "url": "git+https://github.com/maomitgd2006/dsh-CalibGuard.git"
   },
-  "homepage": "https://github.com/maomitgd2006/dsh-CalibGuard#readme",
+  "homepage": "https://github.com/P-436/CalibGuard",
   "exports": {
     ".": "./lib/index.js",
     "./client": "./lib/client.js",
