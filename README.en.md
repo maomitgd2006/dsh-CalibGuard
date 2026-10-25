@@ -69,7 +69,10 @@ are missing. **You don't install them by hand.** After you install the plugin an
 1. copies the bundled `engine/` into `<engineRoot>` (default `~/.dsh/calibguard-engine`);
 2. downloads the model weights from a **release asset of this repository** (~442 MB; GitHub is tried first,
    then ghproxy-style mirrors; cached in `~/.dsh/calibguard-tools/model-cache`);
-3. creates `.venv` (**no preinstalled Python required**: if no 64-bit 3.10–3.12 is found, a portable Python 3.10.8 is downloaded automatically, ~30 MB);
+3. creates `.venv` (**no preinstalled Python required**: it picks a 64-bit Python 3.10–3.12 from PATH, the `py`
+   launcher, `%LOCALAPPDATA%\Programs\Python` or common install dirs; if only 3.13+ or 32-bit Python exists, a
+   portable Python 3.10.8 is downloaded automatically, ~30 MB, GitHub mirror fallback). Run
+   `node setup.mjs --prepare-python` to check/prepare Python alone;
 4. installs dependencies from `requirements-gui.txt` (1–3 GB, Tsinghua PyPI mirror by default);
 5. becomes ready — tools and the panel just work.
 
@@ -351,6 +354,7 @@ Common keys of the loader row `config` (full table: [docs/configuration.md](docs
 | **Panel says "credentialRef required" when saving the API key** | Upgrade to ≥ **0.3.3**: the panel has a "credential name" field (defaults to `DEEPSEEK_API_KEY`) and remembers it; older versions require `credentialRef` in the plugin config |
 | **"This environment does not support writing the DSH credential store"** | Since 0.3.6 the key automatically falls back to the local `~/.dsh/calibguard-credentials.json` (0600) and the panel shows the storage location; you can also configure it in the DSH Models page, or use plugin config `llmApiKey` (not recommended) |
 | **Where are audit results saved / how to clear them** | In the engine's `reports/` directory (default `<engineRoot>/reports`): JSON + Markdown per audit. The panel shows the path and has a "clear results" button; AI tools return `report_md_path` / `report_json_path` |
+| **It says "64-bit Python 3.10–3.12 required" or the automatic Python install fails** | Since 0.5.6 the installer skips 3.13+/32-bit Python and falls back to a portable Python 3.10.8 (uv + GitHub mirror fallback). Run `node setup.mjs --prepare-python` to see detected Pythons and download the portable one; on restricted networks install 64-bit Python 3.12 manually and pass `--python "C:\\Python312\\python.exe"` |
 | **"No module named ''sklearn'' / ''torch'' / ''openai''", or status shows torch unavailable** | The engine venv is missing dependencies (usually because a previous install was interrupted and DSH restarted). Since **0.5.4** the plugin detects this on startup and automatically repairs it; on older versions run `node setup.mjs --dest "<engineRoot>"` in the plugin directory, then restart DSH (or press refresh) |
 | **"First audit will load the model" hint shows every time** | Since 0.3.3 it is only shown while the model is not loaded yet; afterwards the button just says "auditing…" and the header shows "model loaded" |
 | **NVIDIA GPU (e.g. RTX 2060 / GTX 1060) but the engine keeps using CPU** | Check the panel's "inference device" reason: compute capability **≥7.5** (e.g. RTX 2060) with CPU → the installed torch is the CPU build, upgrade to ≥0.3.3 and use the panel prompt or run `node setup.mjs --reinstall-torch` (~2.5 GB); compute capability **<7.5** (e.g. GTX 1060 5GB / 6.1) → **CPU is the expected behavior**, the CPU torch build is already optimal and the panel no longer prompts to reinstall |

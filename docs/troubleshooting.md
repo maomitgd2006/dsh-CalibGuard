@@ -23,7 +23,7 @@
 | **模型下载失败 / 想离线** | 手动下载 `calibguard-model-1.0.0.zip`（Release `model-v1.0.0`），解压出 `model.safetensors` 放到 `~/.dsh/calibguard-tools/model-cache/model.safetensors`（或 `<engineRoot>/models/codebert_finetuned/`），重跑安装即会校验 SHA 并跳过下载 |
 | **首次运行卡在"正在准备环境"** | 正常：首次下载模型（约 442 MB，自动镜像回退）+ 装依赖（1–3 GB），约 10–20 分钟；面板顶部有进度与输出尾巴。若长时间无进度，可看 `~/.dsh/calibguard-tools/model-cache` 是否在增长 |
 | 环境准备失败 | 面板会显示失败原因与最后几行输出；在本插件目录跑 `node setup.mjs` 看完整输出后重试（也支持 `--from` 离线包） |
-| **本机没有 Python** | 会自动用 uv 下载便携 Python 3.10.8（约 30 MB，缓存 `~/.dsh/calibguard-tools`）；若这一步失败会自动给出 python.org 下载链接，也可用 `--python` 指定解释器 |
+| **本机没有 Python / 只有 3.13+ / 自动装 Python 失败** | 插件会自动选择 64 位 3.10–3.12（PATH、`py` 启动器、`%LOCALAPPDATA%\Programs\Python`、常见目录），都不符合时用 uv 下载便携 Python 3.10.8（约 30 MB，缓存 `~/.dsh/calibguard-tools`，走 gh-proxy/ghfast/ghproxy.net 镜像回退）。可运行 `node setup.mjs --prepare-python` 单独检查/准备；网络受限时手动装 64 位 Python 3.12 并用 `--python` 指定 |
 | 大文件审计几十秒 | 正常：耗时 ≈ 窗口数 ÷ CPU 吞吐，见 [performance.md](performance.md) |
 | **侧边栏没有 CalibGuard 图标** | 客户端 bundle 在**宿主启动时**扫描：改完 `dsh.client`/`lib/client.js` 必须**重启 DSH**；并确认 `package.json` 的 `name` 与 bundle `id` 一致 |
 | **面板空白 / 拖拽后报错** | 先看宿主日志里 `[calibguard]` 开头的 warning；路由是否注册可试 `GET /api/calibguard/status` |
@@ -55,3 +55,4 @@ node --test                                       # 全量测试（缺引擎环�
 
 自检脚本会打印：引擎版本、Python/torch、设备定档理由、模型/校准是否存在、门控阈值、
 云端复核是否配好、凭据来源、滑窗与实测吞吐。
+

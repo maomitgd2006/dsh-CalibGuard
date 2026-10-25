@@ -86,13 +86,17 @@ function defaultDest() {
 const DEFAULT_DEST = defaultDest()
 
 /** 给 GitHub 直链生成「直连 + 镜像」候选列表。 */
-function mirroredUrls(url) {
+function mirrorPrefixes() {
   const extra = String(process.env.DSH_CALIBGUARD_ENGINE_MIRRORS || '')
     .split(',')
     .map((item) => item.trim())
     .filter(Boolean)
+  return [...new Set([...extra, ...ENGINE_MIRRORS])]
+}
+
+function mirroredUrls(url) {
   const urls = [url]
-  for (const prefix of [...extra, ...ENGINE_MIRRORS]) {
+  for (const prefix of mirrorPrefixes()) {
     const candidate = prefix + url
     if (!urls.includes(candidate)) urls.push(candidate)
   }
@@ -345,6 +349,7 @@ function parseArgs(argv) {
     force: false,
     noPortablePython: false,
     forcePortablePython: false,
+    preparePython: false,
     reinstallTorch: false,
     forceCuda: false,
     forceCpu: false,
@@ -370,6 +375,7 @@ function parseArgs(argv) {
       case '--force': options.force = true; break
       case '--no-portable-python': options.noPortablePython = true; break
       case '--force-portable-python': options.forcePortablePython = true; break
+      case '--prepare-python': options.preparePython = true; break
       case '--reinstall-torch': options.reinstallTorch = true; break
       case '--force-cuda': options.forceCuda = true; break
       case '--cpu': options.forceCpu = true; break
@@ -398,6 +404,7 @@ function printHelp() {
   --force           覆盖已有引擎目录 / 重建 venv
   --no-portable-python  本机没有 Python 时不自动下载便携版（默认会自动下载）
   --force-portable-python  跳过本机 Python 检测，强制用便携版（测试用）
+  --prepare-python  只检查/准备 Python（缺 3.10–3.12 时自动下载便携版），不安装引擎依赖
   --reinstall-torch 重新安装 torch（检测到 NVIDIA 时装 CUDA/cu128 版，约 2.5 GB）
   --force-cuda      安装时强制选 CUDA 版 torch（跳过 CUDA版本/算力检查，风险自负）
   --cpu             安装时强制选 CPU 版 torch
@@ -413,7 +420,9 @@ function printHelp() {
     从 npm 镜像下载（npmmirror 加速，每个分片 < 256 MB）；也可用 --from 指定 CG 发行包；
   • 依赖安装另需约 1–3 GB 磁盘；装完会实际导入 torch / transformers / sklearn / openai 校验，
     成功才写 .deps-ok.json；venv 不完整（如上次中断）时，DSH 下次启动会自动补装；
-  • 本机没有 64 位 Python 3.10–3.12 时，会自动用 uv 下载便携 Python 3.10.8（约 30 MB）；
+  • 自动选择本机 Python：只接受 64 位 3.10–3.12；会检查 PATH、Windows py 启动器、
+    %LOCALAPPDATA%\Programs\Python、常见安装目录；只有 3.13+ 或 32 位时**改为自动下载
+    便携 Python 3.10.8**（uv，约 30 MB，走 GitHub 镜像回退），不再直接报错；
   • 下载默认走 GitHub 直连，失败会自动尝试 ghproxy / gh-proxy / ghfast 镜像；
     可用 DSH_CALIBGUARD_ENGINE_MIRRORS 追加镜像前缀（逗号分隔）；
   • pip 默认用清华镜像（pypi.tuna.tsinghua.edu.cn），失败自动回退官方 PyPI；
@@ -709,28 +718,51 @@ function findPython(explicit) {
   candidates.push({ label: 'python', cmd: 'python', args: [] })
   candidates.push({ label: 'python3', cmd: 'python3', args: [] })
 
+  // 常见安装位置：用户装了 Python 但没加 PATH 时也能找到（Windows/macOS 尤其常见）
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA
+    const programFiles = process.env.ProgramFiles
+    for (const minor of [PY_MAX, 11, PY_MIN]) {
+      if (local) {
+        candidates.push({
+          label: `%LOCALAPPDATA%\\Programs\\Python\\Python3${minor}`,
+          cmd: join(local, 'Programs', 'Python', `Python3${minor}`, 'python.exe'),
+          args: [],
+        })
+      }
+      if (programFiles) {
+        candidates.push({ label: `%ProgramFiles%\\Python3${minor}`, cmd: join(programFiles, `Python3${minor}`, 'python.exe'), args: [] })
+      }
+      candidates.push({ label: `C:\\Python3${minor}`, cmd: `C:\\Python3${minor}\\python.exe`, args: [] })
+    }
+  } else if (process.platform === 'darwin') {
+    for (const minor of [PY_MAX, 11, PY_MIN]) {
+      candidates.push({ label: `/opt/homebrew/bin/python3.${minor}`, cmd: `/opt/homebrew/bin/python3.${minor}`, args: [] })
+      candidates.push({ label: `/usr/local/bin/python3.${minor}`, cmd: `/usr/local/bin/python3.${minor}`, args: [] })
+    }
+  } else {
+    for (const minor of [PY_MAX, 11, PY_MIN]) {
+      candidates.push({ label: `/usr/bin/python3.${minor}`, cmd: `/usr/bin/python3.${minor}`, args: [] })
+    }
+  }
+
   const seen = []
+  const mismatched = []
+  const tried = new Set()
   for (const candidate of candidates) {
+    const identity = `${candidate.cmd}|${candidate.args.join(' ')}`
+    if (tried.has(identity)) continue
+    tried.add(identity)
     const info = pythonInfo(candidate.cmd, candidate.args)
     if (!info) continue
     const desc = `${candidate.label} = ${info.version} (${info.bits} 位)`
     seen.push(desc)
-    if (info.bits !== 64) continue // torch 没有 32 位轮子
-    if (!versionOk(info.version)) continue
-    return { ...candidate, version: info.version, bits: info.bits }
+    if (info.bits !== 64) { mismatched.push(`${candidate.label}：32 位`); continue } // torch 没有 32 位轮子
+    if (!versionOk(info.version)) { mismatched.push(`${candidate.label}：Python ${info.version} 不在 3.${PY_MIN}–3.${PY_MAX}`); continue }
+    return { python: { ...candidate, version: info.version, bits: info.bits }, seen, mismatched }
   }
 
-  const hints = []
-  if (seen.some((line) => line.includes('(32 位)'))) {
-    hints.push('检测到 32 位 Python：torch 不提供 32 位轮子，必须换 64 位解释器。')
-  }
-  if (seen.some((line) => / = 3\.(1[3-9]|[2-9]\d) \(64 位\)/.test(line))) {
-    hints.push(`检测到 Python 3.${PY_MAX + 1}+：torch 目前没有对应轮子（需要 3.${PY_MIN}–3.${PY_MAX}）。`)
-  }
-  fail(`需要 64 位 Python 3.${PY_MIN}–3.${PY_MAX}。\n`
-    + `检测结果：${seen.length > 0 ? seen.join('、') : '未找到任何 Python'}\n`
-    + `${hints.join('\n')}${hints.length > 0 ? '\n' : ''}`
-    + `请安装 64 位 Python 3.12 后重试，或用 --python 指定解释器（如 --python "C:\\Python312\\python.exe"）。`)
+  return { python: null, seen, mismatched }
 }
 
 // ============================== 便携 Python（本机没有时用 uv 自动装） ==============================
@@ -786,7 +818,11 @@ async function ensureUv(dest) {
   const dir = toolsDir()
   mkdirSync(dir, { recursive: true })
   const archive = join(dir, asset)
-  const urls = mirroredUrls(`https://github.com/astral-sh/uv/releases/latest/download/${asset}`)
+  // 镜像优先、直连兜底：国内直连 GitHub 经常只有几十 KB/s 或被拦。
+  const urls = [
+    ...mirrorPrefixes().map((prefix) => `${prefix}https://github.com/astral-sh/uv/releases/latest/download/${asset}`),
+    `https://github.com/astral-sh/uv/releases/latest/download/${asset}`,
+  ]
   let downloaded = false
   for (const url of urls) {
     try {
@@ -819,8 +855,11 @@ async function ensureUv(dest) {
   return cached
 }
 
-/** 用 uv 下载便携 Python 并创建带 pip 的 venv；成功返回 true。 */
-async function installPortablePython(uv, dest) {
+/** 最近一次便携 Python 安装失败原因（供主流程给出可读报错）。 */
+let portablePythonError = ''
+
+/** 用 uv 下载便携 Python 并（默认）创建带 pip 的 venv；成功返回 true。 */
+async function installPortablePython(uv, dest, { createVenv = true } = {}) {
   const dir = toolsDir()
   const pythonDir = join(dir, 'python')
   mkdirSync(pythonDir, { recursive: true })
@@ -830,15 +869,17 @@ async function installPortablePython(uv, dest) {
     UV_NO_MODIFY_PATH: '1',
     PYTHONIOENCODING: 'utf-8',
   }
+  // 直连 + 与引擎下载相同的活镜像（gh-proxy / ghfast / ghproxy.net）；
+  // uv 把 UV_PYTHON_INSTALL_MIRROR 作为 python-build-standalone 下载前缀。
   const attempts = [
-    { label: '直连', env: baseEnv },
-    {
-      label: '镜像 ghproxy',
+    ...mirrorPrefixes().map((prefix) => ({
+      label: `镜像 ${prefix}`,
       env: {
         ...baseEnv,
-        UV_PYTHON_INSTALL_MIRROR: 'https://ghproxy.cn/https://github.com/astral-sh/python-build-standalone/releases/download',
+        UV_PYTHON_INSTALL_MIRROR: `${prefix}https://github.com/astral-sh/python-build-standalone/releases/download`,
       },
-    },
+    })),
+    { label: '直连', env: baseEnv },
   ]
   let installed = false
   for (const attempt of attempts) {
@@ -849,10 +890,12 @@ async function installPortablePython(uv, dest) {
       timeout: 15 * 60_000,
     })
     if (result.status === 0) { installed = true; break }
-    const tail = String(result.stderr || result.stdout || '').trim().split('\n').slice(-2).join(' / ')
+    const tail = String(result.stderr || result.stdout || '').trim().split('\n').slice(-3).join(' / ')
+    portablePythonError = tail || `exit ${result.status ?? 'error'}`
     warn(`失败：${tail || `exit ${result.status ?? 'error'}`}`)
   }
   if (!installed) return false
+  if (!createVenv) return true
   log('uv venv --seed（创建 .venv）…')
   const venvDir = join(dest, '.venv')
   rmSync(venvDir, { recursive: true, force: true })
@@ -862,7 +905,8 @@ async function installPortablePython(uv, dest) {
     timeout: 10 * 60_000,
   })
   if (venv.status !== 0) {
-    const tail = String(venv.stderr || venv.stdout || '').trim().split('\n').slice(-2).join(' / ')
+    const tail = String(venv.stderr || venv.stdout || '').trim().split('\n').slice(-3).join(' / ')
+    portablePythonError = tail
     warn(`uv venv 失败：${tail}`)
     return false
   }
@@ -890,6 +934,38 @@ async function main() {
     log(`目标盘剩余空间：${bytes(free)}`)
     if (free < 4 * 1024 ** 3) warn('剩余空间不足 4 GB：模型(约 476 MB) + 依赖(1–3 GB) 可能不够。')
   } catch { /* 平台不支持就跳过 */ }
+
+  // --prepare-python：只检查/准备 Python（不碰引擎与依赖），便于排查与手动修复
+  if (options.preparePython) {
+    step('准备 Python 运行环境（--prepare-python）')
+    const detection = options.forcePortablePython
+      ? { python: null, seen: [], mismatched: [] }
+      : findPython(options.python)
+    if (detection.python) {
+      log(`本机已有可用 Python：${detection.python.label}（${detection.python.version}，64 位）`)
+      log('安装器会优先使用它，无需下载便携版。')
+      return
+    }
+    if (!options.forcePortablePython && (options.python || process.env.DSH_CALIBGUARD_PYTHON)) {
+      fail('--python / DSH_CALIBGUARD_PYTHON 指定的解释器不可用，或版本不在 3.10–3.12：\n'
+        + `检测结果：${detection.seen.length > 0 ? detection.seen.join('、') : '无法运行指定解释器'}\n`
+        + '请修正路径，或去掉 --python 让安装器自动下载便携 Python。')
+    }
+    log(detection.seen.length ? `本机 Python 检测：${detection.seen.join('、')}` : '未找到任何 Python')
+    log(`自动下载便携 Python ${PYTHON_PIN}（uv，约 30 MB）…`)
+    const uv = await ensureUv(options.dest)
+    if (!uv) {
+      fail('自动获取 uv 失败（下载被网络拦截？）。请手动安装 64 位 Python 3.12 后重试：'
+        + 'https://www.python.org/downloads/')
+    }
+    const ok = await installPortablePython(uv, options.dest, { createVenv: false })
+    if (!ok) {
+      fail(`自动安装便携 Python 失败。${portablePythonError ? `\n最后一次错误：${portablePythonError}` : ''}\n`
+        + '请检查网络后重试，或手动安装 64 位 Python 3.12：https://www.python.org/downloads/')
+    }
+    log(`✓ 便携 Python ${PYTHON_PIN} 已就绪：${join(toolsDir(), 'python')}`)
+    return
+  }
 
   // ---------- 1. 引擎 ----------
   const before = engineStatus(options.dest)
@@ -999,24 +1075,41 @@ async function main() {
     log('\n跳过创建虚拟环境（--skip-venv）')
   } else {
     step('创建 Python 虚拟环境')
-    const found = options.forcePortablePython ? null : findPython(options.python)
-    if (found) {
-      log(`使用本机 Python：${found.label}（${found.version}）`)
+    const detection = options.forcePortablePython
+      ? { python: null, seen: [], mismatched: [], forced: true }
+      : findPython(options.python)
+    const explicitPython = Boolean(options.python || process.env.DSH_CALIBGUARD_PYTHON)
+    if (options.forcePortablePython) {
+      log('按 --force-portable-python 跳过本机 Python 检测，直接使用便携版。')
+    }
+    if (detection.python) {
+      const found = detection.python
+      log(`使用本机 Python：${found.label}（${found.version}，64 位）`)
       run(found.cmd, [...found.args, '-m', 'venv', join(options.dest, '.venv')])
+    } else if (explicitPython) {
+      fail('--python / DSH_CALIBGUARD_PYTHON 指定的解释器不可用，或版本不在 3.10–3.12：\n'
+        + `检测结果：${detection.seen.length > 0 ? detection.seen.join('、') : '无法运行指定解释器'}\n`
+        + '请修正路径，或去掉 --python 让安装器自动下载便携 Python（约 30 MB）。')
     } else if (options.noPortablePython) {
-      fail('本机没有 64 位 Python 3.10–3.12，且已指定 --no-portable-python。'
-        + '请安装后再试：https://www.python.org/downloads/（或用 --python 指定解释器）')
+      fail('本机没有可用的 64 位 Python 3.10–3.12，且指定了 --no-portable-python。\n'
+        + `检测结果：${detection.seen.length > 0 ? detection.seen.join('、') : '未找到任何 Python'}\n`
+        + '请安装 64 位 Python 3.12 后重试：https://www.python.org/downloads/（或用 --python 指定解释器）')
     } else {
-      log('本机没有可用的 64 位 Python 3.10–3.12，自动下载便携版（首次约 30 MB）…')
+      log(detection.seen.length
+        ? `未找到可用的 64 位 Python 3.10–3.12；检测结果：${detection.seen.join('、')}`
+        : '未找到任何 Python')
+      log(`自动下载便携 Python ${PYTHON_PIN}（uv，约 30 MB）…`)
       const uv = await ensureUv(options.dest)
       if (!uv) {
-        fail('自动获取 uv 失败，无法下载便携 Python。请手动安装 64 位 Python 3.12 后重试：'
-          + 'https://www.python.org/downloads/')
+        fail('自动获取 uv 失败（下载被网络拦截？）。请手动安装 64 位 Python 3.12 后重试：'
+          + 'https://www.python.org/downloads/\n'
+          + '也可以手动指定：node setup.mjs --python "C:\\Python312\\python.exe"')
       }
       const ok = await installPortablePython(uv, options.dest)
       if (!ok) {
-        fail('自动安装便携 Python 失败。请手动安装 64 位 Python 3.12 后重试：'
-          + 'https://www.python.org/downloads/')
+        fail(`自动安装便携 Python 失败。${portablePythonError ? `\n最后一次错误：${portablePythonError}` : ''}\n`
+          + '请检查网络后重试，或手动安装 64 位 Python 3.12：https://www.python.org/downloads/\n'
+          + '也可以用 --python 指定已安装的解释器。')
       }
       log(`✓ 便携 Python ${PYTHON_PIN} 已就绪（${join(toolsDir(), 'python')}）`)
     }

@@ -61,7 +61,9 @@
 1. 把内置 `engine/` 复制到 `<engineRoot>`（默认 `~/.dsh/calibguard-engine`）；
 2. 从**本仓库 Release** 下载模型权重 `model.safetensors`（约 442 MB 压缩包，GitHub 直连失败会自动尝试 ghproxy 等镜像，
    缓存于 `~/.dsh/calibguard-tools/model-cache`）；
-3. 创建 `.venv`（**不需要你预装 Python**：本机没有 64 位 3.10–3.12 时会自动下载便携 Python 3.10.8，约 30 MB）；
+3. 创建 `.venv`（**不需要你预装 Python**：会自动选择本机 64 位 Python 3.10–3.12——会检查 PATH、`py` 启动器、
+   `%LOCALAPPDATA%\Programs\Python`、常见安装目录；只有 3.13+ 或 32 位 Python 时**自动下载便携 Python 3.10.8**，
+   约 30 MB，走 GitHub 镜像回退）；想单独准备/排查 Python 可运行 `node setup.mjs --prepare-python`；
 4. 按 `requirements-gui.txt` 安装依赖（约 1–3 GB，默认清华 PyPI 镜像）；
 5. 就绪后工具/面板自动可用。
 
@@ -324,6 +326,7 @@ CalibGuard 会盯着当前 profile 的插件列表（`dsh.profile.bundles`），
 | **面板保存 API Key 提示"需要 credentialRef"** | 升级到 ≥ **0.3.3**：面板「凭据名」可直接填写并记住（默认预填 `DEEPSEEK_API_KEY`）；旧版本请把 `credentialRef` 写进插件配置 |
 | **提示"当前环境不支持写入 DSH 凭据库"** | ≥0.3.6 起会自动回退到本机凭据文件 `~/.dsh/calibguard-credentials.json`（0600），面板会显示存储位置；想改回凭据库时在 DSH Models 页配置即可。也可用插件配置 `llmApiKey`（不推荐） |
 | **审计结果保存在哪 / 想清空** | 保存在引擎 `reports/` 目录（默认 `<engineRoot>/reports`），每次审计生成 JSON + Markdown；面板结果区显示路径并带「清空结果」按钮；AI 工具返回 `report_md_path` / `report_json_path` |
+| **提示"需要 64 位 Python 3.10–3.12"或自动装 Python 失败** | 0.5.6 起会自动跳过 3.13+/32 位 Python，改用便携 Python 3.10.8（uv + GitHub 镜像回退）。想单独排查可运行 `node setup.mjs --prepare-python`（会打印检测到的 Python 列表并自动下载便携版）；网络受限时可手动安装 64 位 Python 3.12 后用 `--python "C:\Python312\python.exe"` 指定 |
 | **报错 No module named 'sklearn' / 'torch' / 'openai'，或状态显示 torch unavailable** | 说明引擎 venv 的依赖没装全（典型原因：上次安装被中断后 DSH 重启）。升级到 **0.5.4** 后启动时会自动检测并补装；旧版本请在插件目录运行 `node setup.mjs --dest "<引擎目录>"`，完成后重启 DSH（或点刷新状态） |
 | **审计时总提示"首次会加载模型"** | 0.3.3 起只在模型尚未加载时提示；加载后按钮只显示「审计中…」，顶部状态显示「模型 已加载」 |
 | **有 NVIDIA 显卡（如 RTX 2060 / GTX 1060）但一直显示 CPU** | 先看面板的「推理设备」原因：算力 **≥7.5**（如 RTX 2060）却显示 CPU → 装的是 CPU 版 torch，升级到 ≥0.3.3 后点提示或运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）；算力 **<7.5**（如 GTX 1060 5GB / 6.1）→ **强制 CPU 是正常行为**，CPU 版 torch 已是最优，面板不会提示重装 |
