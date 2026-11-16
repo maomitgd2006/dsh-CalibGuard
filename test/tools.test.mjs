@@ -6,6 +6,8 @@ import assert from 'node:assert/strict'
 import { test } from 'node:test'
 
 import { normalizeConfig } from '../lib/config.js'
+import { join } from 'node:path'
+
 import { buildTools } from '../lib/tools.js'
 
 /** 造一个记录调用的假引擎。 */
@@ -120,9 +122,12 @@ function sampleStatus(overrides = {}) {
 }
 
 const config = normalizeConfig(undefined)
+/** 伪造的会话工作目录：相对路径必须锚定它（而不是进程 cwd）。 */
+const testCwd = 'D:\\proj'
+const withCwd = { resolveSessionCwd: async () => testCwd }
 
 test('注册三个工具，名称与必填参数正确', () => {
-  const tools = buildTools({ engine: fakeEngine(), config })
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
   assert.equal(tools.length, 3)
   const [audit, status] = tools
   assert.equal(audit.name, 'calibguard_audit')
@@ -135,18 +140,18 @@ test('注册三个工具，名称与必填参数正确', () => {
   assert.equal(typeof audit.execute, 'function')
   assert.equal(typeof audit.output.render, 'function')
   assert.equal(audit.timeoutMs, config.auditTimeoutMs)
-  assert.equal(audit.isConcurrencySafe(), true)
+  assert.equal(audit.isConcurrencySafe(), false, '引擎单并发，必须声明不并发安全')
 })
 
 test('输出 schema 覆盖 bridge 回传的全部字段（缺字段会被 DSH 校验拦下）', async () => {
-  const tools = buildTools({ engine: fakeEngine(), config })
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
   const audit = tools[0]
   const properties = audit.output.schema.properties
   assert.equal(audit.output.schema.additionalProperties, false)
   const itemSchema = properties.results.items
   assert.equal(itemSchema.additionalProperties, false)
 
-  const value = await audit.execute({ paths: ['a.py'] }, { signal: undefined })
+  const value = await audit.execute({ paths: ['D:\\abs\\a.py'] }, { signal: undefined })
   for (const key of Object.keys(value)) {
     assert.ok(key in properties, `输出根字段 ${key} 未在 schema 中声明`)
   }
@@ -161,13 +166,14 @@ test('输出 schema 覆盖 bridge 回传的全部字段（缺字段会被 DSH �
   }
 })
 
-test('audit 把相对路径解析为绝对路径，只传调用级参数', async () => {
+test('audit 把相对路径解析为会话工作目录下的绝对路径，只传调用级参数', async () => {
   const engine = fakeEngine()
-  const tools = buildTools({ engine, config })
-  await tools[0].execute({ paths: ['samples/demo.py', 'D:\\abs\\x.py'] }, {})
+  const tools = buildTools({ engine, config, ...withCwd })
+  const value = await tools[0].execute({ paths: ['samples/demo.py', 'D:\\abs\\x.py'] }, {})
   const call = engine.calls[0]
-  assert.equal(call.paths[0].startsWith(process.cwd()), true)
+  assert.equal(call.paths[0], 'D:\\proj\\samples\\demo.py', '相对路径必须锚定会话 cwd')
   assert.equal(call.paths[1], 'D:\\abs\\x.py')
+  assert.deepEqual(value.auditPaths, call.paths, '结果里应回显解析后的绝对路径')
   assert.equal(call.options.includeEvidence, true)
   // 部署配置 / GUI 共享设置由 engine 合并，工具层不再重复发送
   assert.equal('maxFiles' in call.options, false)
@@ -178,7 +184,7 @@ test('audit 把相对路径解析为绝对路径，只传调用级参数', async
 })
 
 test('audit 拒绝空路径与非法项', async () => {
-  const tools = buildTools({ engine: fakeEngine(), config })
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
   await assert.rejects(() => tools[0].execute({ paths: [] }, {}), /paths 必须是非空数组/)
   await assert.rejects(() => tools[0].execute({ paths: ['  '] }, {}), /非法项/)
   await assert.rejects(() => tools[0].execute({ paths: [7] }, {}), /非法项/)
@@ -186,14 +192,14 @@ test('audit 拒绝空路径与非法项', async () => {
 
 test('max_files / include_evidence 参数生效', async () => {
   const engine = fakeEngine()
-  const tools = buildTools({ engine, config })
+  const tools = buildTools({ engine, config, ...withCwd })
   await tools[0].execute({ paths: ['d'], max_files: 7, include_evidence: false }, {})
   assert.equal(engine.calls[0].options.maxFiles, 7)
   assert.equal(engine.calls[0].options.includeEvidence, false)
 })
 
 test('render 输出人类可读摘要（含决策标签、证据与报告路径）', async () => {
-  const tools = buildTools({ engine: fakeEngine(), config })
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
   const blocks = tools[0].output.render({}, {
     summary: { total: 2, allow: 1, block: 1, suspicious: 0, manual_review: 0, error: 0 },
     elapsedMs: 2500,
@@ -214,7 +220,7 @@ test('render 输出人类可读摘要（含决策标签、证据与报告路径�
 })
 
 test('render 对 LLM 复核与一致性告警有专门文案', () => {
-  const tools = buildTools({ engine: fakeEngine(), config })
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
   const blocks = tools[0].output.render({}, {
     summary: { total: 1, allow: 0, block: 0, suspicious: 1, manual_review: 0, error: 0 },
     elapsedMs: 100,
@@ -243,7 +249,7 @@ test('render 对 LLM 复核与一致性告警有专门文案', () => {
 })
 
 test('status 工具直接返回引擎快照并渲染就绪信息', async () => {
-  const tools = buildTools({ engine: fakeEngine(), config })
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
   const value = await tools[1].execute({}, {})
   assert.equal(value.device, 'cpu')
   const blocks = tools[1].output.render({}, value)
@@ -255,7 +261,7 @@ test('status 工具直接返回引擎快照并渲染就绪信息', async () => {
 test('defineTool 注入生效（用于获得 DSH 侧定义期校验）', () => {
   const seen = []
   const define = (definition) => { seen.push(definition.name); return definition }
-  buildTools({ engine: fakeEngine(), config, define })
+  buildTools({ engine: fakeEngine(), config, ...withCwd, define })
   assert.deepEqual(seen, ['calibguard_audit', 'calibguard_status', 'calibguard_configure'])
 })
 
@@ -263,7 +269,7 @@ test('defineTool 注入生效（用于获得 DSH 侧定义期校验）', () => {
 
 test('调用级参数覆盖：阈值/送审模式/滑窗/截断都进入桥接 options', async () => {
   const engine = fakeEngine()
-  const tools = buildTools({ engine, config })
+  const tools = buildTools({ engine, config, ...withCwd })
   await tools[0].execute({
     paths: ['a.py'],
     allow_threshold: 0.05,
@@ -289,7 +295,7 @@ test('调用级参数覆盖：阈值/送审模式/滑窗/截断都进入桥接 o
 })
 
 test('调用级参数校验：非法阈值/枚举/长度被拒绝', async () => {
-  const tools = buildTools({ engine: fakeEngine(), config })
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
   const cases = [
     [{ allow_threshold: 0.9, block_threshold: 0.2 }, /阈值必须满足/],
     [{ allow_threshold: 1.2 }, /allow_threshold 必须是/],
@@ -314,7 +320,7 @@ test('调用级参数校验：非法阈值/枚举/长度被拒绝', async () => 
 
 test('未给覆盖参数时行为与之前一致（不向桥接发送多余项）', async () => {
   const engine = fakeEngine()
-  const tools = buildTools({ engine, config })
+  const tools = buildTools({ engine, config, ...withCwd })
   await tools[0].execute({ paths: ['a.py'] }, {})
   const options = engine.calls.find((item) => item.kind === 'audit').options
   assert.equal('allowThreshold' in options, false)
@@ -324,7 +330,7 @@ test('未给覆盖参数时行为与之前一致（不向桥接发送多余项�
 })
 
 test('render 摘要里带出本次送审口径', () => {
-  const tools = buildTools({ engine: fakeEngine(), config })
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
   const blocks = tools[0].output.render({}, {
     summary: { total: 1, allow: 0, block: 0, suspicious: 1, manual_review: 0, error: 0 },
     elapsedMs: 100,
@@ -353,7 +359,7 @@ test('render 摘要里带出本次送审口径', () => {
 
 test('calibguard_configure 注册且参数/输出 schema 正确', () => {
   const engine = fakeEngine()
-  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const tools = buildTools({ engine, config: normalizeConfig(undefined), ...withCwd })
   assert.deepEqual(tools.map((tool) => tool.name), ['calibguard_audit', 'calibguard_status', 'calibguard_configure'])
   const configure = tools.find((tool) => tool.name === 'calibguard_configure')
   assert.ok(configure.parameters.allow_threshold)
@@ -363,7 +369,7 @@ test('calibguard_configure 注册且参数/输出 schema 正确', () => {
 
 test('calibguard_configure 保存共享设置（合并现有值、可恢复默认）', async () => {
   const engine = fakeEngine({ settings: { llmEnabled: false, maxFiles: 10 } })
-  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const tools = buildTools({ engine, config: normalizeConfig(undefined), ...withCwd })
   const configure = tools.find((tool) => tool.name === 'calibguard_configure')
   const result = await configure.execute({ allow_threshold: 0.2, block_threshold: 0.9, max_files: 30 })
   assert.equal(result.ok, true)
@@ -385,7 +391,7 @@ test('calibguard_configure 保存共享设置（合并现有值、可恢复默�
 
 test('calibguard_configure 拒绝读取/写入 API Key', async () => {
   const engine = fakeEngine()
-  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const tools = buildTools({ engine, config: normalizeConfig(undefined), ...withCwd })
   const configure = tools.find((tool) => tool.name === 'calibguard_configure')
   await assert.rejects(() => configure.execute({ llm_api_key: 'sk-secret' }), /不读写 API Key/)
   await assert.rejects(() => configure.execute({ apiKey: 'sk-secret' }), /不读写 API Key/)
@@ -395,7 +401,7 @@ test('calibguard_configure 拒绝读取/写入 API Key', async () => {
 
 test('calibguard_configure reset 清空共享设置', async () => {
   const engine = fakeEngine({ settings: { allowThreshold: 0.1 } })
-  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const tools = buildTools({ engine, config: normalizeConfig(undefined), ...withCwd })
   const configure = tools.find((tool) => tool.name === 'calibguard_configure')
   const result = await configure.execute({ reset: true })
   assert.equal(result.ok, true)
@@ -407,10 +413,54 @@ test('calibguard_configure reset 清空共享设置', async () => {
 test('calibguard_configure 输出永远不含 API Key（防泄漏兜底）', async () => {
   // 即使底层设置意外混入键值，sanitize 也会剔除
   const engine = fakeEngine({ settings: { llmEnabled: true, llmApiKey: 'sk-should-not-leak' } })
-  const tools = buildTools({ engine, config: normalizeConfig(undefined) })
+  const tools = buildTools({ engine, config: normalizeConfig(undefined), ...withCwd })
   const configure = tools.find((tool) => tool.name === 'calibguard_configure')
   const result = await configure.execute({ llm_enabled: true })
   const text = JSON.stringify(result)
   assert.equal(text.includes('sk-should-not-leak'), false)
   assert.equal(text.includes('llmApiKey'), false)
+})
+
+
+// ============================== D1 回归：路径锚点 / 自保护 ==============================
+
+test('无会话 cwd 时拒绝相对路径（绝不回退到进程 cwd）', async () => {
+  const tools = buildTools({ engine: fakeEngine(), config })
+  await assert.rejects(
+    () => tools[0].execute({ paths: ['.'] }, {}),
+    /无法解析相对路径|绝对路径/,
+  )
+  await assert.rejects(
+    () => tools[0].execute({ paths: ['samples'] }, {}),
+    /无法解析相对路径|绝对路径/,
+  )
+})
+
+test('拒绝审计 CalibGuard 自身安装目录（含父子目录）', async () => {
+  const tools = buildTools({ engine: fakeEngine(), config, ...withCwd })
+  const engineRoot = config.engineRootResolved ?? config.engineRoot
+  await assert.rejects(
+    () => tools[0].execute({ paths: [engineRoot] }, {}),
+    /自身安装目录/,
+  )
+  // 自身目录内部的显式目标允许（例如 engineRoot\\samples），只拦截"整个自身目录/父目录"
+  const nested = await tools[0].execute({ paths: [join(engineRoot, 'samples')] }, {})
+  assert.equal(nested.auditPaths[0], join(engineRoot, 'samples'))
+  await assert.rejects(
+    () => tools[0].execute({ paths: [config.packageRoot] }, {}),
+    /自身安装目录/,
+  )
+  await assert.rejects(
+    () => tools[0].execute({ paths: [join(engineRoot, '..')] }, {}),
+    /自身安装目录|包含 CalibGuard/,
+  )
+})
+
+test('绝对路径原样使用并回显 auditPaths', async () => {
+  const engine = fakeEngine()
+  const tools = buildTools({ engine, config, ...withCwd })
+  const value = await tools[0].execute({ paths: ['D:\\abs\\ok.py'] }, {})
+  assert.deepEqual(value.auditPaths, ['D:\\abs\\ok.py'])
+  const blocks = tools[0].output.render({}, value)
+  assert.match(blocks[0].text, /审计目标（已解析为绝对路径）/)
 })

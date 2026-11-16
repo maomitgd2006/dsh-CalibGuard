@@ -328,6 +328,8 @@ CalibGuard 会盯着当前 profile 的插件列表（`dsh.profile.bundles`），
 | **审计结果保存在哪 / 想清空** | 保存在引擎 `reports/` 目录（默认 `<engineRoot>/reports`），每次审计生成 JSON + Markdown；面板结果区显示路径并带「清空结果」按钮；AI 工具返回 `report_md_path` / `report_json_path` |
 | **提示"需要 64 位 Python 3.10–3.12"或自动装 Python 失败** | 0.5.6 起会自动跳过 3.13+/32 位 Python，改用便携 Python 3.10.8（uv + GitHub 镜像回退）。想单独排查可运行 `node setup.mjs --prepare-python`（会打印检测到的 Python 列表并自动下载便携版）；网络受限时可手动安装 64 位 Python 3.12 后用 `--python "C:\Python312\python.exe"` 指定 |
 | **报错 No module named 'sklearn' / 'torch' / 'openai'，或状态显示 torch unavailable** | 说明引擎 venv 的依赖没装全（典型原因：上次安装被中断后 DSH 重启）。升级到 **0.5.4** 后启动时会自动检测并补装；旧版本请在插件目录运行 `node setup.mjs --dest "<引擎目录>"`，完成后重启 DSH（或点刷新状态） |
+| **传 `.` / 相对路径会扫错目录吗** | 0.6.0 起：相对路径按**会话工作目录**解析（不再用插件进程 cwd）；没有会话 cwd 时直接报错，要求绝对路径。审计 CalibGuard 自身安装目录或其父目录会被拒绝；目录展开达到 `maxFiles` 立即停止，并跳过 `.venv`/`node_modules`/`__pycache__`/`.git`/`.pnpm`；结果里会回显解析后的绝对路径 |
+| **审计跑太久 / 想中止** | 0.6.0 起：取消工具调用会直接结束引擎进程（真正释放 CPU），下次调用自动重启；审计进行中查 `calibguard_status` 会快速返回缓存快照，不再等 60s 超时 |
 | **审计时总提示"首次会加载模型"** | 0.3.3 起只在模型尚未加载时提示；加载后按钮只显示「审计中…」，顶部状态显示「模型 已加载」 |
 | **有 NVIDIA 显卡（如 RTX 2060 / GTX 1060）但一直显示 CPU** | 先看面板的「推理设备」原因：算力 **≥7.5**（如 RTX 2060）却显示 CPU → 装的是 CPU 版 torch，升级到 ≥0.3.3 后点提示或运行 `node setup.mjs --reinstall-torch`（约 2.5 GB）；算力 **<7.5**（如 GTX 1060 5GB / 6.1）→ **强制 CPU 是正常行为**，CPU 版 torch 已是最优，面板不会提示重装 |
 | **想强制用 GPU / CPU 版 torch** | 安装时加 `--force-cuda` / `--cpu`（配合 `--reinstall-torch` 可覆盖已装版本）；运行时设备由插件配置 `device`（auto/cpu/cuda）决定，`cuda` 需要 CUDA 版 torch |
@@ -350,7 +352,7 @@ dsh-CalibGuard/
 ├── engine/              从 CG_GUI 复制来的引擎核心（代码/词表/校准参数，不含 475 MB 权重）
 ├── cordis.patch.yml     组合包 patch（把插件行插进 profile 配置树）
 ├── scripts/             link-dsh（开发期挂包）、bridge-selftest（引擎自检）
-├── test/                node --test（126 个用例；缺引擎环境时自动 skip）
+├── test/                npm test（node --test --test-concurrency=1，129 个用例；缺引擎环境时自动 skip）
 ├── .github/workflows/   publish.yml：npm 可信发布（OIDC，可选）
 └── docs/                配置全表、性能、排错、插件契约、实现决策
 ```

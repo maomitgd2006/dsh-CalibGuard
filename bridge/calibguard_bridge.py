@@ -446,6 +446,39 @@ def _engine_version() -> str:
 
 # ============================== op: audit ==============================
 
+# 目录展开时跳过的重目录：这些几乎不可能是"用户想审计的样本"，却会把 walk 放大几十倍
+#（插件引擎目录里 .venv + 模型 + pnpm store 曾让 20 个文件的上限先做了 3.9 万次 stat）。
+_HEAVY_DIR_NAMES = {
+    ".venv", "venv", "node_modules", "__pycache__", ".git", ".pnpm",
+    ".mypy_cache", ".ruff_cache", ".pytest_cache", ".cache",
+}
+
+
+def _walk_files_bounded(root: str, limit: int, skip_roots: tuple = ()) -> tuple:
+    """带上限的递归收集：(文件列表, 是否截断)。
+
+    与"先全量 walk 再截断"不同：收集到 limit+1 个文件立即停止，避免在超大目录里
+    先做几万次 stat。显式给出的文件不受此函数影响。
+    """
+    if limit <= 0:
+        return [], True
+    collected: list = []
+    root_abs = os.path.abspath(root)
+    skip = tuple(os.path.abspath(item) for item in skip_roots if item)
+    for dirpath, dirnames, filenames in os.walk(root_abs):
+        dirnames[:] = sorted(name for name in dirnames if name not in _HEAVY_DIR_NAMES)
+        for name in sorted(filenames):
+            full = os.path.join(dirpath, name)
+            full_abs = os.path.abspath(full)
+            if any(full_abs == item or full_abs.startswith(item + os.sep) for item in skip):
+                continue
+            collected.append(full)
+            if len(collected) > limit:
+                collected.pop()
+                return collected, True
+    return collected, False
+
+
 def _expand_paths(pipeline, paths: list, max_files: int) -> tuple:
     """把入参路径展开为待审计文件列表；(文件列表, 截断标记)。
 
@@ -469,15 +502,24 @@ def _expand_paths(pipeline, paths: list, max_files: int) -> tuple:
 
     collected: list = []
     truncated = False
+    # 报告输出目录不参与目录展开（否则可能把上一次的报告当样本审）
+    report_dir = ""
+    try:
+        report_dir = os.path.abspath(getattr(pipeline.cfg, "report_output_dir", "") or "")
+    except Exception:  # noqa: BLE001 - 读不到就当作没有
+        report_dir = ""
+    skip_roots = (report_dir,) if report_dir else ()
+    remaining = max_files
     for directory in directories:
-        if len(collected) >= max_files:
+        if remaining <= 0:
             truncated = True
             break
-        for found in pipeline._collect_files(directory):   # 引擎同款递归收集（按路径排序、跳过输出目录）
-            if len(collected) >= max_files:
-                truncated = True
-                break
-            collected.append(found)
+        found, was_truncated = _walk_files_bounded(directory, remaining, skip_roots)
+        collected.extend(found)
+        remaining = max_files - len(collected)
+        if was_truncated:
+            truncated = True
+            break
     return explicit + collected, truncated
 
 

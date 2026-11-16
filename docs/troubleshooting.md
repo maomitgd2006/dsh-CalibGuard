@@ -21,6 +21,7 @@
 | **想强制装 GPU / CPU 版 torch** | 安装时加 `--force-cuda` / `--cpu`（可配合 `--reinstall-torch` 覆盖已装版本）；CPU 版与 CUDA 版不能共存于同一 venv，CUDA 版在无 GPU 时会自动回落 CPU |
 | **首次安装特别慢 / 提示某个源不可用** | 模型默认 4 路并发分段下载（`DSH_CALIBGUARD_DOWNLOAD_CONNECTIONS` 可调），GitHub 失败自动换 gh-proxy/ghfast/ghproxy 镜像；pip 自动在 清华/阿里/中科大/腾讯/官方 之间回退。实在慢可手动下载 `calibguard-model-1.0.0.zip` 放到缓存目录（见下一条） |
 | **模型下载失败 / 想离线** | 手动下载 `calibguard-model-1.0.0.zip`（Release `model-v1.0.0`），解压出 `model.safetensors` 放到 `~/.dsh/calibguard-tools/model-cache/model.safetensors`（或 `<engineRoot>/models/codebert_finetuned/`），重跑安装即会校验 SHA 并跳过下载 |
+| **传 `.` 或相对路径扫错目录 / 审计停不下来** | 0.6.0 起相对路径按会话工作目录解析，无会话 cwd 直接报错；拒绝审计引擎自身目录及其父目录；目录展开到 `maxFiles` 立即停止并跳过 `.venv`/`node_modules`/`__pycache__` 等；取消调用会终止引擎进程；审计中 `status` 返回缓存快照 |
 | **首次运行卡在"正在准备环境"** | 正常：首次下载模型（约 442 MB，自动镜像回退）+ 装依赖（1–3 GB），约 10–20 分钟；面板顶部有进度与输出尾巴。若长时间无进度，可看 `~/.dsh/calibguard-tools/model-cache` 是否在增长 |
 | 环境准备失败 | 面板会显示失败原因与最后几行输出；在本插件目录跑 `node setup.mjs` 看完整输出后重试（也支持 `--from` 离线包） |
 | **本机没有 Python / 只有 3.13+ / 自动装 Python 失败** | 插件会自动选择 64 位 3.10–3.12（PATH、`py` 启动器、`%LOCALAPPDATA%\Programs\Python`、常见目录），都不符合时用 uv 下载便携 Python 3.10.8（约 30 MB，缓存 `~/.dsh/calibguard-tools`，走 gh-proxy/ghfast/ghproxy.net 镜像回退）。可运行 `node setup.mjs --prepare-python` 单独检查/准备；网络受限时手动装 64 位 Python 3.12 并用 `--python` 指定 |
